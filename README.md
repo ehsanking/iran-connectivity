@@ -26,7 +26,7 @@ This tool helps identify data centers, CDNs, and DNS providers that can still co
 ```bash
 git clone https://github.com/ehsanking/iran-connectivity.git
 cd iran-connectivity
-npm install
+apt install npm -y
 ```
 
 ### Basic Usage | استفاده پایه
@@ -464,10 +464,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🙏 Acknowledgments | قدردانی
 
 **English:**
-This tool is dedicated to all internet freedom activists fighting for free access to information.
+This tool is dedicated to all internet freedom activists for free access to information.
 
 **فارسی:**
-این ابزار به تمام فعالان آزادی اینترنت که برای دسترسی آزاد به اطلاعات می‌جنگند، تقدیم شده است.
+این ابزار به تمام فعالان آزادی اینترنت تقدیم شده است.
 
 ---
 
