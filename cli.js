@@ -456,6 +456,7 @@ class IranCheckCLI {
         console.log();
     }
 
+    // Resolved merge choice: keep helper tools block from feature branch.
     printHelpfulTools(targetIp = '') {
         const safeIp = this.validateIp(targetIp) ? targetIp : '1.1.1.1';
         console.log(chalk.blue('🧰 ابزارهای کمکی پیشنهادی:'));
