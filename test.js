@@ -109,9 +109,12 @@ try {
 // Test 4: CLI Interface (mock test)
 console.log('4️⃣ Testing CLI Interface...');
 try {
-    const cliSource = fs.readFileSync('./cli.js', 'utf8');
-    const hasMergeMarkers = cliSource.includes('<<<<<<<') || cliSource.includes('=======') || cliSource.includes('>>>>>>>');
-    console.log(`   ✅ No merge-conflict markers in cli.js: ${!hasMergeMarkers}`);
+    const jsFiles = fs.readdirSync('.').filter(file => file.endsWith('.js') && file !== 'test.js');
+    const filesWithMarkers = jsFiles.filter(file => {
+        const source = fs.readFileSync(`./${file}`, 'utf8');
+        return source.includes('<<<<<<<') && source.includes('=======') && source.includes('>>>>>>>');
+    });
+    console.log(`   ✅ No merge-conflict markers in JS files: ${filesWithMarkers.length === 0}`);
 
     // Test IP validation
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
