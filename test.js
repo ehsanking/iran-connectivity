@@ -24,6 +24,15 @@ try {
     configManager.set('network.timeout', 10);
     const newTimeout = configManager.get('network.timeout');
     console.log(`   ✅ Updated timeout: ${newTimeout}s`);
+
+    // Security test: block prototype pollution paths
+    let blockedUnsafePath = false;
+    try {
+        configManager.set('__proto__.polluted', true);
+    } catch {
+        blockedUnsafePath = true;
+    }
+    console.log(`   ✅ Unsafe path blocked: ${blockedUnsafePath}`);
     
     // Test validation
     const { errors, warnings } = configManager.validateConfig();
