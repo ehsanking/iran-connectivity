@@ -1,0 +1,46 @@
+{
+  "name": "iran-check",
+  "version": "1.0.0",
+  "description": "Iran Internet Access Analysis Tool - برای حفظ آزادی اینترنت",
+  "main": "cli.js",
+  "bin": {
+    "iran-check": "./cli.js"
+  },
+  "scripts": {
+    "start": "node cli.js",
+    "analyze": "node cli.js analyze",
+    "providers": "node cli.js providers",
+    "test": "node test.js",
+    "help": "node cli.js --help"
+  },
+  "keywords": [
+    "iran",
+    "censorship",
+    "internet-freedom",
+    "tunneling",
+    "connectivity",
+    "analysis",
+    "data-centers",
+    "cdn",
+    "dns",
+    "network-analysis"
+  ],
+  "author": "Internet Freedom Activist",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^9.4.1",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/irancheck/iran-check.git"
+  },
+  "bugs": {
+    "url": "https://github.com/irancheck/iran-check/issues"
+  },
+  "homepage": "https://github.com/irancheck/iran-check#readme"
+}

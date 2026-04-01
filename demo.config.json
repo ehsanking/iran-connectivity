@@ -1,0 +1,13 @@
+{
+  "network": {
+    "timeout": 5,
+    "maxConcurrent": 50
+  },
+  "testing": {
+    "sampleSize": 5,
+    "logLevel": "info"
+  },
+  "output": {
+    "format": "json"
+  }
+}
