@@ -11,6 +11,7 @@ const chalk = require('chalk');
 const ora = require('ora');
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const IranConnectivityAnalyzer = require('./iran_connectivity');
 const { TunnelRecommendationEngine } = require('./tunnel_recommendations');
@@ -117,6 +118,9 @@ class IranCheckCLI {
             console.log(chalk.blue(`🎯 شروع تحلیل برای آی‌پی: ${chalk.bold(targetIp)}`));
             console.log(chalk.gray(`⏱️  تایماوت: ${options.timeout}s | 📊 حداکثر تست همزمان: ${options.concurrent}`));
             console.log();
+
+            this.printWhoisInfo(targetIp);
+            this.printLookingGlassReferences();
 
             // Initialize analyzer
             this.analyzer = new IranConnectivityAnalyzer({
@@ -380,13 +384,88 @@ class IranCheckCLI {
         return ipRegex.test(ip);
     }
 
+    printWhoisInfo(targetIp) {
+        console.log(chalk.blue('🔎 اطلاعات WHOIS آی‌پی هدف:'));
+        const whoisResult = spawnSync('whois', [targetIp], {
+            encoding: 'utf8',
+            timeout: 8000
+        });
+
+        if (whoisResult.error || whoisResult.status !== 0 || !whoisResult.stdout) {
+            console.log(chalk.yellow('   ⚠️ امکان دریافت WHOIS از سیستم وجود ندارد (whois نصب نیست یا پاسخ نداد).'));
+            console.log();
+            return;
+        }
+
+        const summary = this.extractWhoisSummary(whoisResult.stdout);
+        if (summary.length === 0) {
+            console.log(chalk.yellow('   ⚠️ خروجی WHOIS دریافت شد اما خلاصه قابل‌نمایش پیدا نشد.'));
+            console.log();
+            return;
+        }
+
+        summary.forEach(line => console.log(`   • ${line}`));
+        console.log();
+    }
+
+    extractWhoisSummary(rawWhois) {
+        const wantedKeys = [
+            'netname', 'orgname', 'org-name', 'descr', 'country', 'route', 'originas', 'origin', 'aut-num'
+        ];
+
+        const lines = rawWhois
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('%') && !line.startsWith('#'));
+
+        const summary = [];
+        const seenKeys = new Set();
+
+        for (const line of lines) {
+            const separator = line.indexOf(':');
+            if (separator === -1) continue;
+
+            const key = line.slice(0, separator).trim().toLowerCase();
+            const value = line.slice(separator + 1).trim();
+            if (!value || !wantedKeys.includes(key) || seenKeys.has(key)) continue;
+
+            seenKeys.add(key);
+            summary.push(`${key.toUpperCase()}: ${value}`);
+
+            if (summary.length >= 7) break;
+        }
+
+        return summary;
+    }
+
+    printLookingGlassReferences() {
+        const providersWithLg = Object.values(IP_RANGES)
+            .filter(provider => Array.isArray(provider.lookingGlass) && provider.lookingGlass.length > 0);
+
+        if (providersWithLg.length === 0) {
+            return;
+        }
+
+        console.log(chalk.blue('🌐 Looking Glassهای پیشنهادی برای بررسی مسیر/latency:'));
+        providersWithLg.forEach(provider => {
+            console.log(`   • ${provider.name}`);
+            provider.lookingGlass.forEach(url => {
+                console.log(`     - ${url}`);
+            });
+        });
+        console.log();
+    }
+
     printProviders() {
         console.log(chalk.blue('\n📋 لیست ارائهدهندگان:'));
         console.log(chalk.gray('═'.repeat(80)));
         
         const providers = getAllProviders();
         providers.forEach((provider, index) => {
-            console.log(`${chalk.yellow((index + 1).toString().padStart(2))}. ${chalk.green.bold(provider.name.padEnd(30))} ${chalk.gray(`(${provider.rangeCount} ranges)`)}`);
+            const providerInfo = IP_RANGES[provider.key] || {};
+            const locationLabel = providerInfo.city ? ` | شهر: ${providerInfo.city}` : '';
+            const packageLabel = providerInfo.package ? ` | پکیج: ${providerInfo.package}` : '';
+            console.log(`${chalk.yellow((index + 1).toString().padStart(2))}. ${chalk.green.bold(provider.name.padEnd(30))} ${chalk.gray(`(${provider.rangeCount} ranges${locationLabel}${packageLabel})`)}`);
         });
         
         console.log(chalk.gray('═'.repeat(80)));

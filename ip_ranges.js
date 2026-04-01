@@ -213,6 +213,47 @@ const IP_RANGES = {
             '82.148.0.0/14', '82.152.0.0/14', '82.156.0.0/14', '82.160.0.0/14'
         ]
     },
+
+    // European Data Centers (city + package labels for easier selection)
+    hetzner_falkenstein_cx22: {
+        name: 'Hetzner - Falkenstein, DE (CX22)',
+        city: 'Falkenstein',
+        package: 'CX22',
+        lookingGlass: ['https://lg.hetzner.com/'],
+        ranges: ['78.46.0.0/15', '88.198.0.0/16', '159.69.0.0/16']
+    },
+
+    ovh_gravelines_starter: {
+        name: 'OVHcloud - Gravelines, FR (Starter VPS)',
+        city: 'Gravelines',
+        package: 'Starter VPS',
+        lookingGlass: ['https://www.ovh.com/world/network/looking-glass/'],
+        ranges: ['51.68.0.0/16', '51.75.0.0/16', '54.36.0.0/15']
+    },
+
+    leaseweb_amsterdam_general: {
+        name: 'Leaseweb - Amsterdam, NL (General VPS)',
+        city: 'Amsterdam',
+        package: 'General VPS',
+        lookingGlass: ['https://lg.leaseweb.com/'],
+        ranges: ['31.31.32.0/19', '85.17.0.0/16', '95.211.0.0/16']
+    },
+
+    contabo_nuremberg_vps_s: {
+        name: 'Contabo - Nuremberg, DE (VPS S)',
+        city: 'Nuremberg',
+        package: 'VPS S',
+        lookingGlass: ['https://status.contabo.com/'],
+        ranges: ['5.189.128.0/17', '62.171.0.0/16', '161.97.0.0/16']
+    },
+
+    scaleway_paris_dev1s: {
+        name: 'Scaleway - Paris, FR (DEV1-S)',
+        city: 'Paris',
+        package: 'DEV1-S',
+        lookingGlass: ['https://www.scaleway.com/en/network/'],
+        ranges: ['51.15.0.0/16', '62.210.0.0/16', '212.129.0.0/18']
+    },
     
     // Russian data centers that might have good connectivity to Iran
     russian_data_centers: {
