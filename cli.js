@@ -456,12 +456,13 @@ class IranCheckCLI {
         console.log();
     }
 
-    printHelpfulTools(targetIp) {
+    printHelpfulTools(targetIp = '') {
+        const safeIp = this.validateIp(targetIp) ? targetIp : '1.1.1.1';
         console.log(chalk.blue('🧰 ابزارهای کمکی پیشنهادی:'));
         const tools = [
-            { name: 'BGP HE', url: `https://bgp.he.net/ip/${targetIp}`, reason: 'مشاهده ASN، Prefix و مسیرهای BGP' },
-            { name: 'RIPEstat', url: `https://stat.ripe.net/${targetIp}`, reason: 'تحلیل routing, ASN, visibility' },
-            { name: 'IPInfo', url: `https://ipinfo.io/${targetIp}`, reason: 'خلاصه سریع provider/location/ASN' },
+            { name: 'BGP HE', url: `https://bgp.he.net/ip/${safeIp}`, reason: 'مشاهده ASN، Prefix و مسیرهای BGP' },
+            { name: 'RIPEstat', url: `https://stat.ripe.net/${safeIp}`, reason: 'تحلیل routing, ASN, visibility' },
+            { name: 'IPInfo', url: `https://ipinfo.io/${safeIp}`, reason: 'خلاصه سریع provider/location/ASN' },
             { name: 'PeeringDB', url: 'https://www.peeringdb.com/', reason: 'بررسی اتصال و حضور اپراتورها/IXها' },
             { name: 'Cloudflare Radar', url: 'https://radar.cloudflare.com/', reason: 'وضعیت اختلال/شبکه در سطح منطقه‌ای' }
         ];
