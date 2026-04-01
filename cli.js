@@ -456,6 +456,24 @@ class IranCheckCLI {
         console.log();
     }
 
+    printHelpfulTools(targetIp = '') {
+        const safeIp = this.validateIp(targetIp) ? targetIp : '1.1.1.1';
+        console.log(chalk.blue('🧰 ابزارهای کمکی پیشنهادی:'));
+        const tools = [
+            { name: 'BGP HE', url: `https://bgp.he.net/ip/${safeIp}`, reason: 'مشاهده ASN، Prefix و مسیرهای BGP' },
+            { name: 'RIPEstat', url: `https://stat.ripe.net/${safeIp}`, reason: 'تحلیل routing, ASN, visibility' },
+            { name: 'IPInfo', url: `https://ipinfo.io/${safeIp}`, reason: 'خلاصه سریع provider/location/ASN' },
+            { name: 'PeeringDB', url: 'https://www.peeringdb.com/', reason: 'بررسی اتصال و حضور اپراتورها/IXها' },
+            { name: 'Cloudflare Radar', url: 'https://radar.cloudflare.com/', reason: 'وضعیت اختلال/شبکه در سطح منطقه‌ای' }
+        ];
+
+        tools.forEach(tool => {
+            console.log(`   • ${tool.name}: ${tool.url}`);
+            console.log(`     - ${tool.reason}`);
+        });
+        console.log();
+    }
+
     printProviders() {
         console.log(chalk.blue('\n📋 لیست ارائهدهندگان:'));
         console.log(chalk.gray('═'.repeat(80)));
@@ -506,6 +524,23 @@ program
     .action(() => {
         const cli = new IranCheckCLI();
         cli.printProviders();
+    });
+
+program
+    .command('precheck <targetIp>')
+    .description('نمایش WHOIS + Looking Glass + ابزارهای کمکی قبل از تحلیل اصلی')
+    .action((targetIp) => {
+        const cli = new IranCheckCLI();
+        if (!cli.validateIp(targetIp)) {
+            console.error(chalk.red('❌ آی‌پی وارد شده معتبر نیست'));
+            process.exit(1);
+        }
+
+        cli.printBanner();
+        console.log(chalk.cyan(`\nپیش‌بررسی برای: ${targetIp}\n`));
+        cli.printWhoisInfo(targetIp);
+        cli.printLookingGlassReferences();
+        cli.printHelpfulTools(targetIp);
     });
 
 program

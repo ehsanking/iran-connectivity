@@ -8,6 +8,7 @@
 const IranConnectivityAnalyzer = require('./iran_connectivity');
 const { TunnelRecommendationEngine } = require('./tunnel_recommendations');
 const { ConfigManager } = require('./config_manager');
+const fs = require('fs');
 
 console.log('🧪 Testing Iran Check Tool...\n');
 
@@ -108,6 +109,13 @@ try {
 // Test 4: CLI Interface (mock test)
 console.log('4️⃣ Testing CLI Interface...');
 try {
+    const jsFiles = fs.readdirSync('.').filter(file => file.endsWith('.js') && file !== 'test.js');
+    const filesWithMarkers = jsFiles.filter(file => {
+        const source = fs.readFileSync(`./${file}`, 'utf8');
+        return source.includes('<<<<<<<') && source.includes('=======') && source.includes('>>>>>>>');
+    });
+    console.log(`   ✅ No merge-conflict markers in JS files: ${filesWithMarkers.length === 0}`);
+
     // Test IP validation
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
     
