@@ -399,6 +399,22 @@ This tool is designed for legitimate internet freedom research and activism. Use
 
 ### Common Issues | مشکلات رایج
 
+**Git merge conflict (`<<<<<<<`, `=======`, `>>>>>>>`)**
+
+**English:** merge fails when unresolved conflict markers remain in source files (for example `cli.js`). Keep one final version of the conflicted block, remove all markers, then run:
+
+```bash
+npm test
+node -c cli.js
+```
+
+**فارسی:** اگر markerهای conflict داخل کد باقی مانده باشند (مثلاً در `cli.js`) عملیات merge شکست می‌خورد. فقط نسخه نهایی بلاک را نگه دارید، markerها را کامل حذف کنید، سپس اجرا کنید:
+
+```bash
+npm test
+node -c cli.js
+```
+
 **English:**
 ```bash
 # Permission denied
