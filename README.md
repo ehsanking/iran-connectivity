@@ -55,6 +55,12 @@ node cli.js providers
 node cli.js recommend connectivity_report.json
 ```
 
+### 📚 Tutorials | آموزش‌ها
+
+**English:** 📖 [Detailed English Tutorial](TUTORIAL_EN.md) - Complete guide with examples
+
+**فارسی:** 📖 [آموزش جامع فارسی](TUTORIAL_FA.md) - راهنمای کامل با مثال
+
 ---
 
 ## 📖 Detailed Usage Guide | راهنمای جامع
