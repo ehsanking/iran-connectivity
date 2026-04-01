@@ -226,13 +226,22 @@ class ConfigManager {
     }
 
     getNestedValue(obj, path) {
-        return path.split('.').reduce((current, key) => {
+        const keys = this.parsePath(path);
+        if (keys.length === 0) {
+            return undefined;
+        }
+
+        return keys.reduce((current, key) => {
             return current && current[key] !== undefined ? current[key] : undefined;
         }, obj);
     }
 
     setNestedValue(obj, path, value) {
-        const keys = path.split('.');
+        const keys = this.parsePath(path);
+        if (keys.length === 0) {
+            throw new Error('Invalid configuration path');
+        }
+
         const lastKey = keys.pop();
         const target = keys.reduce((current, key) => {
             if (!current[key] || typeof current[key] !== 'object') {
@@ -247,8 +256,8 @@ class ConfigManager {
         const result = JSON.parse(JSON.stringify(target));
         
         for (const key in source) {
-            if (source.hasOwnProperty(key)) {
-                if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            if (Object.prototype.hasOwnProperty.call(source, key) && !this.isUnsafeKey(key)) {
+                if (this.isPlainObject(source[key])) {
                     result[key] = this.deepMerge(result[key] || {}, source[key]);
                 } else {
                     result[key] = source[key];
@@ -257,6 +266,27 @@ class ConfigManager {
         }
         
         return result;
+    }
+
+    parsePath(pathValue) {
+        if (typeof pathValue !== 'string') {
+            throw new Error('Configuration path must be a string');
+        }
+
+        const keys = pathValue.split('.').map(k => k.trim()).filter(Boolean);
+        if (keys.some(key => this.isUnsafeKey(key))) {
+            throw new Error('Unsafe configuration path');
+        }
+
+        return keys;
+    }
+
+    isUnsafeKey(key) {
+        return key === '__proto__' || key === 'constructor' || key === 'prototype';
+    }
+
+    isPlainObject(value) {
+        return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
     }
 
     validateConfig() {
