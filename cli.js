@@ -9,6 +9,7 @@ const chalk = require('chalk');
 const ora = require('ora');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const { spawnSync } = require('child_process');
 const IranConnectivityAnalyzer = require('./iran_connectivity');
 const { TunnelRecommendationEngine } = require('./tunnel_recommendations');
@@ -90,6 +91,7 @@ class IranCheckCLI {
         this.progressManager = new ProgressManager();
         this.analyzer = null;
         this.recommendationEngine = new TunnelRecommendationEngine();
+        this.ipApiCache = new Map();
     }
     printBanner(enabled = true) {
         if (enabled) {
@@ -115,6 +117,7 @@ class IranCheckCLI {
             console.log(chalk.gray(`⏱️ Timeout: ${options.timeout}s | 📊 Max concurrent tests: ${options.concurrent}`));
             console.log();
             this.printWhoisInfo(targetIp);
+            await this.printIpApiSummary('Target IP', targetIp);
             this.printLookingGlassReferences();
             const selectedProviders = this.resolveSelectedProviders(options.providers, options.preset);
             if (selectedProviders.length > 0) {
@@ -149,6 +152,7 @@ class IranCheckCLI {
             // Run analysis
             this.progressManager.start('🔬 Running connectivity checks...');
             const results = await this.analyzer.runAnalysis();
+            await this.attachIpApiMetadata(results);
             
             this.progressManager.stop();
             // Generate recommendations
@@ -177,6 +181,84 @@ class IranCheckCLI {
                 console.error(error.stack);
             }
             process.exit(1);
+        }
+    }
+    fetchIpApiInfo(ip) {
+        if (!this.validateIp(ip)) {
+            return Promise.resolve(null);
+        }
+        if (this.ipApiCache.has(ip)) {
+            return Promise.resolve(this.ipApiCache.get(ip));
+        }
+        const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,query,country,city,regionName,timezone,isp,org,as,lat,lon,mobile,proxy,hosting`;
+        return new Promise((resolve) => {
+            const req = http.get(url, { timeout: 5000 }, (res) => {
+                if (res.statusCode !== 200) {
+                    this.ipApiCache.set(ip, null);
+                    res.resume();
+                    resolve(null);
+                    return;
+                }
+                let raw = '';
+                res.setEncoding('utf8');
+                res.on('data', (chunk) => {
+                    raw += chunk;
+                });
+                res.on('end', () => {
+                    try {
+                        const payload = JSON.parse(raw);
+                        if (payload.status !== 'success') {
+                            this.ipApiCache.set(ip, null);
+                            resolve(null);
+                            return;
+                        }
+                        this.ipApiCache.set(ip, payload);
+                        resolve(payload);
+                    } catch (_error) {
+                        this.ipApiCache.set(ip, null);
+                        resolve(null);
+                    }
+                });
+            });
+            req.on('timeout', () => {
+                req.destroy();
+                this.ipApiCache.set(ip, null);
+                resolve(null);
+            });
+            req.on('error', () => {
+                this.ipApiCache.set(ip, null);
+                resolve(null);
+            });
+        });
+    }
+    async printIpApiSummary(label, ip) {
+        const info = await this.fetchIpApiInfo(ip);
+        if (!info) {
+            console.log(chalk.yellow(`🌍 ${label} GeoIP (ip-api): unavailable`));
+            console.log();
+            return;
+        }
+        console.log(chalk.blue(`🌍 ${label} GeoIP (ip-api):`));
+        console.log(`   • Query: ${info.query}`);
+        console.log(`   • Location: ${info.city || 'Unknown'}, ${info.country || 'Unknown'}`);
+        console.log(`   • ISP: ${info.isp || 'Unknown'}`);
+        console.log(`   • AS: ${info.as || 'Unknown'}`);
+        console.log();
+    }
+    async attachIpApiMetadata(results) {
+        if (!results || !Array.isArray(results.detailedResults)) return;
+        results.targetIpInfo = await this.fetchIpApiInfo(results.targetIp);
+        for (const provider of results.detailedResults) {
+            if (!provider || !provider.bestConnection || !provider.bestConnection.ip) continue;
+            const info = await this.fetchIpApiInfo(provider.bestConnection.ip);
+            if (!info) continue;
+            provider.bestConnection.ipApi = info;
+            if (!provider.bestConnection.location) {
+                provider.bestConnection.location = {
+                    city: info.city || null,
+                    country: info.country || null
+                };
+            }
         }
     }
     async generateRecommendations(results, options) {
@@ -308,6 +390,11 @@ class IranCheckCLI {
                             const country = conn.location.country || 'Unknown';
                             console.log(`     • IP location: ${city}, ${country}`);
                         }
+                        if (conn.ipApi) {
+                            console.log(`     • IP-API ISP/ORG: ${conn.ipApi.isp || 'Unknown'} / ${conn.ipApi.org || 'Unknown'}`);
+                            console.log(`     • IP-API AS/Timezone: ${conn.ipApi.as || 'Unknown'} / ${conn.ipApi.timezone || 'Unknown'}`);
+                            console.log(`     • IP-API Flags: hosting=${Boolean(conn.ipApi.hosting)} proxy=${Boolean(conn.ipApi.proxy)} mobile=${Boolean(conn.ipApi.mobile)}`);
+                        }
                         console.log(`     • Source ping: ${conn.sourcePing ? '✓' : '✗'}`);
                         console.log(`     • Target ping (${results.targetIp}): ${conn.targetPing ? '✓' : '✗'}`);
                         if (conn.stageResults) {
@@ -362,7 +449,7 @@ class IranCheckCLI {
         }
     }
     convertToCsv(results) {
-        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Tested Range,Best IP Location,Ping Stage,Traceroute Stage,BGP Stage,Port 80,Port 443,Port 22,Port 53,Traceroute Reached Target,BGP ASN,BGP Prefix,BGP Registry\n';
+        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Tested Range,Best IP Location,IP-API ISP,IP-API AS,Ping Stage,Traceroute Stage,BGP Stage,Port 80,Port 443,Port 22,Port 53,Traceroute Reached Target,BGP ASN,BGP Prefix,BGP Registry\n';
         
         results.detailedResults.forEach(provider => {
             const successRate = provider.ranges.length > 0 
@@ -374,7 +461,7 @@ class IranCheckCLI {
                 ? `${bestConn.location.city || 'Unknown City'}, ${bestConn.location.country || 'Unknown Country'}`
                 : 'N/A';
             
-            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestConn.testedCidr || 'N/A'},${bestLocation},${bestConn.stageResults?.ping || 'N/A'},${bestConn.stageResults?.traceroute || 'N/A'},${bestConn.stageResults?.bgp || 'N/A'},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false},${bestConn.tracerouteReachedTarget ?? 'N/A'},${bestConn.bgpOriginAsn ?? 'N/A'},${bestConn.bgpPrefix ?? 'N/A'},${bestConn.bgpRegistry ?? 'N/A'}\n`;
+            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestConn.testedCidr || 'N/A'},${bestLocation},${bestConn.ipApi?.isp || 'N/A'},${bestConn.ipApi?.as || 'N/A'},${bestConn.stageResults?.ping || 'N/A'},${bestConn.stageResults?.traceroute || 'N/A'},${bestConn.stageResults?.bgp || 'N/A'},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false},${bestConn.tracerouteReachedTarget ?? 'N/A'},${bestConn.bgpOriginAsn ?? 'N/A'},${bestConn.bgpPrefix ?? 'N/A'},${bestConn.bgpRegistry ?? 'N/A'}\n`;
         });
         
         return csv;
