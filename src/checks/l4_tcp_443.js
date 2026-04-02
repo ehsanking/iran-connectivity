@@ -7,6 +7,8 @@ async function run(target, context) {
     return {
         level: 'L4',
         name: 'tcp-443',
+        port: 443,
+        protocol: 'tcp',
         ok: result.ok,
         details: result.ok ? 'TCP/443 is reachable' : `TCP/443 failed: ${result.error || 'unknown'}`
     };

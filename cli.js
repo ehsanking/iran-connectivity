@@ -772,6 +772,17 @@ program
                 'Stages: L1 → L7'
             ]));
             const report = await runPipeline(target, { timeoutSeconds });
+            const successfulPorts = [...new Set(
+                report.pipeline.levels
+                    .filter((item) => item.ok && Number.isInteger(item.port))
+                    .map((item) => item.port)
+            )].sort((a, b) => a - b);
+            console.log(renderPanel('🧪 STAGE RESULTS', report.pipeline.levels.map((item) => {
+                const status = item.ok ? chalk.green('PASS') : chalk.red('FAIL');
+                const portLabel = item.ok && Number.isInteger(item.port)
+                    ? ` ${THEME.success(`(port ${item.port} ✅)`)}` : '';
+                return `${chalk.white(item.level)} ${THEME.muted(item.name)}: ${status}${portLabel}`;
+            })));
             const body = JSON.stringify(report, null, 2);
             if (options.output) {
                 fs.writeFileSync(options.output, body);
@@ -782,6 +793,7 @@ program
             console.log(renderPanel('✅ VERIFY SUMMARY', [
                 `Passed levels: ${chalk.white(report.pipeline.summary.passedLevels)}/${chalk.white(report.pipeline.summary.totalLevels)}`,
                 `Pass rate: ${chalk.white(`${report.pipeline.summary.passRate}%`)}`,
+                `Successful ports: ${chalk.white(successfulPorts.length > 0 ? successfulPorts.join(', ') : '-')}`,
                 `Generated: ${THEME.muted(report.generatedAt)}`
             ]));
         } catch (error) {
