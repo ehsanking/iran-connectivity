@@ -158,6 +158,41 @@ node cli.js config add-range "192.168.1.0/24" "Custom Provider"
 node cli.js config reset
 ```
 
+### 4. Iran-side Local Listener (No extra package) | لیسنر محلی سمت ایران (بدون پکیج اضافه)
+
+**English:**
+```bash
+# Start TCP + UDP listener on port 9000 (default)
+node cli.js listener
+
+# Start only TCP on a custom port
+node cli.js listener --protocol tcp --port 8081
+
+# Start only UDP on a custom host/port
+node cli.js listener --protocol udp --host 0.0.0.0 --port 5353
+```
+
+**فارسی:**
+```bash
+# اجرای لیسنر TCP و UDP روی پورت ۹۰۰۰ (پیشفرض)
+node cli.js listener
+
+# فقط TCP روی پورت دلخواه
+node cli.js listener --protocol tcp --port 8081
+
+# فقط UDP روی هاست/پورت دلخواه
+node cli.js listener --protocol udp --host 0.0.0.0 --port 5353
+```
+
+**Quick probe examples | نمونه تست سریع**
+```bash
+# TCP test (from client machine)
+echo "ping" | nc <IRAN_SERVER_IP> 9000
+
+# UDP test (from client machine)
+echo "ping" | nc -u -w2 <IRAN_SERVER_IP> 9000
+```
+
 ---
 
 ## 📊 Features | ویژگی‌ها
@@ -182,13 +217,13 @@ node cli.js config reset
 - **Port Testing**: 80, 443, 22, 53
 - **Connection Quality**: Response time, packet loss, stability
 - **Network Analysis**: Firewall detection, routing paths
-- **Scoring System**: 0-100 connectivity score
+- **MTR Result**: clear ✓ / ✗ status in detailed output (+ loss %)
 
 **فارسی:**
 - **تست پورت**: ۸۰، ۴۴۳، ۲۲، ۵۳
 - **کیفیت اتصال**: زمان پاسخ، از دست دادن بسته، پایداری
 - **تحلیل شبکه**: تشخیص فایروال، مسیرهای مسیریابی
-- **سیستم امتیازدهی**: امتیاز اتصال ۰-۱۰۰
+- **نتیجه MTR**: نمایش واضح ✓ / ✗ در خروجی دقیق (به‌همراه درصد loss)
 
 ### Tunnel Recommendations | پیشنهادهای تونل‌زنی
 
@@ -229,6 +264,7 @@ node cli.js config reset
 | Command | Description | توضیح فارسی |
 |---------|-------------|-------------|
 | `analyze <IP>` | Analyze connectivity to Iranian IP | تحلیل اتصال به IP ایرانی |
+| `listener` | Start local TCP/UDP probe listener | اجرای لیسنر محلی TCP/UDP برای تست |
 | `providers` | List all providers | لیست تمام ارائه‌دهندگان |
 | `recommend <file>` | Get tunnel recommendations | دریافت پیشنهادهای تونل‌زنی |
 | `config` | Configuration management | مدیریت پیکربندی |
@@ -287,7 +323,7 @@ done
 **English:**
 ```bash
 # Pipe to other tools
-node cli.js analyze 185.185.123.45 --export json | jq '.results[] | select(.score > 70)'
+node cli.js analyze 185.185.123.45 --export json | jq '.results[] | select(.ports["443"] == true)'
 
 # Use with cron for monitoring
 echo "0 2 * * * cd /path/to/irancheck && node cli.js analyze 185.185.123.45 --export json --output daily_\$(date +\%Y\%m\%d).json" | crontab -
@@ -296,7 +332,7 @@ echo "0 2 * * * cd /path/to/irancheck && node cli.js analyze 185.185.123.45 --ex
 **فارسی:**
 ```bash
 # اتصال به ابزارهای دیگر
-node cli.js analyze 185.185.123.45 --export json | jq '.results[] | select(.score > 70)'
+node cli.js analyze 185.185.123.45 --export json | jq '.results[] | select(.ports["443"] == true)'
 
 # استفاده با cron برای نظارت
 echo "0 2 * * * cd /path/to/irancheck && node cli.js analyze 185.185.123.45 --export json --output daily_\$(date +\%Y\%m\%d).json" | crontab -

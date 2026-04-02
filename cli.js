@@ -10,6 +10,8 @@ const ora = require('ora');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const net = require('net');
+const dgram = require('dgram');
 const { spawnSync } = require('child_process');
 const IranConnectivityAnalyzer = require('./iran_connectivity');
 const { TunnelRecommendationEngine } = require('./tunnel_recommendations');
@@ -354,6 +356,13 @@ class IranCheckCLI {
         }
     }
     async printDetailedReport(results) {
+        const mtrBadge = (connection) => {
+            if (!connection) return '✗';
+            if (!connection.mtrAvailable) return '✗';
+            if (typeof connection.mtrLossPercent !== 'number') return '✗';
+            return connection.mtrLossPercent <= 20 ? '✓' : '✗';
+        };
+
         console.log(chalk.blue('\n📊 Detailed report:'));
         console.log(chalk.gray('═'.repeat(80)));
         // Summary statistics
@@ -366,7 +375,9 @@ class IranCheckCLI {
         if (results.successfulProviders.length > 0) {
             console.log(chalk.green('\n✅ Successful providers:'));
             results.successfulProviders.forEach((provider, index) => {
-                console.log(`   ${index + 1}. ${provider.name} (score: ${provider.bestScore})`);
+                const badge = mtrBadge(provider.bestConnection);
+                const loss = typeof provider.bestConnection?.mtrLossPercent === 'number' ? `${provider.bestConnection.mtrLossPercent}%` : 'N/A';
+                console.log(`   ${index + 1}. ${provider.name} (MTR: ${badge}, loss: ${loss})`);
             });
         }
         // Failed providers
@@ -383,7 +394,9 @@ class IranCheckCLI {
                 if (provider.successfulConnections.length > 0) {
                     console.log(chalk.green(`\n   ${provider.name}:`));
                     console.log(`     • Successful paths: ${provider.successfulConnections.length}`);
-                    console.log(`     • Best score: ${provider.connectivityScore}`);
+                    const badge = mtrBadge(provider.bestConnection);
+                    const loss = typeof provider.bestConnection?.mtrLossPercent === 'number' ? `${provider.bestConnection.mtrLossPercent}%` : 'N/A';
+                    console.log(`     • MTR test result: ${badge} (loss: ${loss})`);
                     const groupedByRange = provider.successfulConnections.reduce((acc, conn) => {
                         const range = conn.testedCidr || 'Unknown range';
                         if (!acc[range]) acc[range] = 0;
@@ -428,6 +441,7 @@ class IranCheckCLI {
                             console.log(`     • BGP prefix: ${conn.bgpPrefix ?? 'N/A'}`);
                             console.log(`     • BGP registry: ${conn.bgpRegistry ?? 'N/A'}`);
                         }
+                        console.log(`     • Stage 4 (MTR): ${conn.stageResults?.mtr || 'skipped'}`);
                         console.log(`     • Target reachability: ${conn.targetReachability || 0}%`);
                     }
                 }
@@ -606,6 +620,46 @@ class IranCheckCLI {
         console.log(chalk.cyan(`🧾 Total providers: ${providers.length}`));
     }
 }
+
+function startProbeListener(options = {}) {
+    const host = options.host || '0.0.0.0';
+    const port = Number(options.port || 9000);
+    const protocol = String(options.protocol || 'both').toLowerCase();
+    const tcpEnabled = protocol === 'tcp' || protocol === 'both';
+    const udpEnabled = protocol === 'udp' || protocol === 'both';
+
+    if (!tcpEnabled && !udpEnabled) {
+        throw new Error('Protocol must be tcp, udp, or both');
+    }
+
+    if (tcpEnabled) {
+        const tcpServer = net.createServer((socket) => {
+            socket.setEncoding('utf8');
+            socket.on('data', (data) => {
+                const payload = String(data || '').trim();
+                socket.write(`OK TCP port=${port} payload="${payload || 'empty'}"\n`);
+            });
+            socket.on('error', () => {});
+        });
+        tcpServer.listen(port, host, () => {
+            console.log(chalk.green(`✅ TCP listener active on ${host}:${port}`));
+        });
+    }
+
+    if (udpEnabled) {
+        const udpServer = dgram.createSocket('udp4');
+        udpServer.on('message', (msg, rinfo) => {
+            const payload = String(msg || '').trim();
+            const response = Buffer.from(`OK UDP port=${port} payload="${payload || 'empty'}"`);
+            udpServer.send(response, rinfo.port, rinfo.address);
+        });
+        udpServer.bind(port, host, () => {
+            console.log(chalk.green(`✅ UDP listener active on ${host}:${port}`));
+        });
+    }
+
+    console.log(chalk.cyan(`ℹ️ Listener running (protocol=${protocol}). Press Ctrl+C to stop.`));
+}
 // Commander.js setup
 program
     .name('iran-check')
@@ -637,6 +691,16 @@ program
             banner: options.banner
         });
     });
+program
+    .command('listener')
+    .description('Start local TCP/UDP echo listener for Iranian-side port/protocol testing')
+    .option('--host <host>', 'Bind host', '0.0.0.0')
+    .option('--port <port>', 'Bind port', '9000')
+    .option('--protocol <protocol>', 'tcp | udp | both', 'both')
+    .action((options) => {
+        startProbeListener(options);
+    });
+
 program
     .command('providers')
     .description('Show provider list')
