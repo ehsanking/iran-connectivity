@@ -10,10 +10,11 @@
     "start": "node cli.js",
     "analyze": "node cli.js analyze",
     "providers": "node cli.js providers",
-    "test": "node test.js",
+    "test": "node --test tests/*.test.js",
     "test:accuracy": "node --test tests/*.test.js",
     "test:all": "npm run test && npm run test:accuracy",
-    "help": "node cli.js --help"
+    "help": "node cli.js --help",
+    "test:legacy": "node test.js"
   },
   "keywords": [
     "iran",

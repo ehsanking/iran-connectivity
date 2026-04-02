@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ehsanking/iran-connectivity/schema/report.schema.json",
+  "title": "Iran Connectivity Verify Report",
+  "type": "object",
+  "required": ["schemaVersion", "generatedAt", "target", "pipeline"],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0.0" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "target": { "type": "string" },
+    "pipeline": {
+      "type": "object",
+      "required": ["levels", "summary"],
+      "properties": {
+        "levels": {
+          "type": "array",
+          "minItems": 7,
+          "items": {
+            "type": "object",
+            "required": ["level", "name", "ok", "details"],
+            "properties": {
+              "level": { "type": "string", "pattern": "^L[1-7]$" },
+              "name": { "type": "string" },
+              "ok": { "type": "boolean" },
+              "details": { "type": "string" },
+              "meta": { "type": "object" }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "required": ["totalLevels", "passedLevels", "failedLevels", "passRate"],
+          "properties": {
+            "totalLevels": { "type": "integer" },
+            "passedLevels": { "type": "integer" },
+            "failedLevels": { "type": "integer" },
+            "passRate": { "type": "number" }
+          }
+        }
+      }
+    },
+    "controller": { "type": "object" },
+    "agent": { "type": "object" }
+  }
+}

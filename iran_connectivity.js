@@ -16,6 +16,7 @@ const execAsync = promisify(exec);
 
 class IranConnectivityAnalyzer {
     constructor(options = {}) {
+        process.emitWarning('iran_connectivity.js is deprecated. Please use the src/core/pipeline verify flow.', { code: 'IRAN_CONNECTIVITY_DEPRECATED' });
         this.targetIp = options.targetIp || process.argv[2];
         this.timeout = options.timeout || 5; // seconds
         this.maxConcurrent = options.maxConcurrent || 50;

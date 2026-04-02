@@ -14,15 +14,31 @@ const { spawnSync } = require('child_process');
 const IranConnectivityAnalyzer = require('./iran_connectivity');
 const { TunnelRecommendationEngine } = require('./tunnel_recommendations');
 const { getAllProviders, IP_RANGES } = require('./ip_ranges');
+const { ConfigManager } = require('./config_manager');
+const { runPipeline } = require('./src/core/pipeline');
+const { startAgentServer } = require('./src/core/agent');
+const { runDistributed } = require('./src/core/controller');
+const THEME = {
+    primary: chalk.hex('#7C3AED'),
+    secondary: chalk.hex('#06B6D4'),
+    success: chalk.hex('#10B981'),
+    muted: chalk.gray
+};
+
+function renderPanel(title, lines = []) {
+    const width = 64;
+    const top = THEME.primary(`╭${'─'.repeat(width - 2)}╮`);
+    const bottom = THEME.primary(`╰${'─'.repeat(width - 2)}╯`);
+    const paddedTitle = ` ${title}`.padEnd(width - 1, ' ');
+    const body = lines.map((line) => `│ ${line}`.padEnd(width - 1, ' ') + '│');
+    return [top, THEME.primary(`│${paddedTitle}│`), ...body.map((line) => THEME.secondary(line)), bottom].join('\n');
+}
 // ASCII Art Banner
 const BANNER = `
-${chalk.cyan.bold('╔══════════════════════════════════════════════════════════╗')}
-${chalk.cyan.bold('║                                                          ║')}
-${chalk.cyan.bold(`║${chalk.white.bold('                      IRAN CHECK                          ')}║`)}
-${chalk.cyan.bold('║                                                          ║')}
-${chalk.cyan.bold(`║${chalk.yellow('   Iran connectivity analysis for censorship resilience   ')}║`)}
-${chalk.cyan.bold('║                                                          ║')}
-${chalk.cyan.bold('╚══════════════════════════════════════════════════════════╝')}
+${THEME.primary('╭──────────────────────────────────────────────────────────╮')}
+${THEME.primary('│')}${chalk.white.bold('                      IRAN CHECK                          ')}${THEME.primary('│')}
+${THEME.primary('│')}${THEME.muted('       Modern connectivity intelligence for operators      ')}${THEME.primary('│')}
+${THEME.primary('╰──────────────────────────────────────────────────────────╯')}
 `;
 const PROVIDER_PRESETS = {
     famous: [
@@ -676,6 +692,128 @@ program
             process.exit(1);
         }
     });
+
+program
+    .command('verify <target>')
+    .description('Run pipeline verification L1..L7 for a target')
+    .option('-t, --timeout <seconds>', 'Timeout per check', '5')
+    .option('-o, --output <file>', 'Output file path')
+    .action(async (target, options) => {
+        try {
+            const configManager = new ConfigManager();
+            const timeoutSeconds = Number(options.timeout || configManager.get('network.timeout') || 5);
+            console.log(renderPanel('🔎 VERIFY PIPELINE', [
+                `Target: ${chalk.white(target)}`,
+                `Timeout: ${chalk.white(`${timeoutSeconds}s`)}`,
+                'Stages: L1 → L7'
+            ]));
+            const report = await runPipeline(target, { timeoutSeconds });
+            const body = JSON.stringify(report, null, 2);
+            if (options.output) {
+                fs.writeFileSync(options.output, body);
+                console.log(THEME.success(`\n✅ Verify report saved to ${options.output}`));
+            } else {
+                console.log(body);
+            }
+            console.log(renderPanel('✅ VERIFY SUMMARY', [
+                `Passed levels: ${chalk.white(report.pipeline.summary.passedLevels)}/${chalk.white(report.pipeline.summary.totalLevels)}`,
+                `Pass rate: ${chalk.white(`${report.pipeline.summary.passRate}%`)}`,
+                `Generated: ${THEME.muted(report.generatedAt)}`
+            ]));
+        } catch (error) {
+            console.error(chalk.red(`❌ Verify failed: ${error.message}`));
+            process.exit(1);
+        }
+    });
+
+program
+    .command('agent')
+    .description('Agent operations')
+    .command('serve')
+    .description('Start verify listener agent')
+    .option('--host <host>', 'Bind host', '127.0.0.1')
+    .option('--port <port>', 'Bind port', '9090')
+    .action(async (options) => {
+        const agent = await startAgentServer({ host: options.host, port: Number(options.port) });
+        console.log(renderPanel('🤖 AGENT ONLINE', [
+            `Endpoint: ${chalk.white(`http://${agent.host}:${agent.port}`)}`,
+            'Health check: GET /health',
+            'Verification: POST /verify'
+        ]));
+    });
+
+program
+    .command('controller')
+    .description('Controller operations')
+    .command('run')
+    .description('Run distributed checks from an inventory file')
+    .requiredOption('--inventory <file>', 'Inventory JSON file')
+    .option('-t, --timeout <seconds>', 'Timeout per check', '5')
+    .option('-o, --output <file>', 'Output file path', 'controller_report.json')
+    .action(async (options) => {
+        try {
+            console.log(renderPanel('🧭 CONTROLLER RUN', [
+                `Inventory: ${chalk.white(options.inventory)}`,
+                `Timeout: ${chalk.white(`${options.timeout}s`)}`,
+                `Output: ${chalk.white(options.output)}`
+            ]));
+            const report = await runDistributed(options.inventory, { timeoutSeconds: Number(options.timeout) });
+            fs.writeFileSync(options.output, JSON.stringify(report, null, 2));
+            console.log(THEME.success(`\n✅ Controller report saved to ${options.output}`));
+            console.log(renderPanel('📦 CONTROLLER SUMMARY', [
+                `Targets processed: ${chalk.white(report.count)}`,
+                `Generated at: ${THEME.muted(report.generatedAt)}`
+            ]));
+        } catch (error) {
+            console.error(chalk.red(`❌ Controller run failed: ${error.message}`));
+            process.exit(1);
+        }
+    });
+
+program
+    .command('config <subcommand> [key] [value]')
+    .description('Manage runtime configuration via config_manager')
+    .action((subcommand, key, value) => {
+        const config = new ConfigManager();
+        try {
+            console.log(renderPanel('⚙️ CONFIG', [
+                `Command: ${chalk.white(subcommand)}`,
+                key ? `Key: ${chalk.white(key)}` : 'Key: -'
+            ]));
+            if (subcommand === 'show') {
+                console.log(config.toString());
+                return;
+            }
+            if (subcommand === 'get') {
+                console.log(JSON.stringify(config.get(key), null, 2));
+                return;
+            }
+            if (subcommand === 'set') {
+                const parsed = value ? JSON.parse(value) : value;
+                config.set(key, parsed);
+                config.saveConfig();
+                console.log(chalk.green('✅ Config updated'));
+                return;
+            }
+            if (subcommand === 'validate') {
+                const result = config.validateConfig();
+                console.log(JSON.stringify(result, null, 2));
+                return;
+            }
+            console.error(chalk.red('❌ Unknown config subcommand'));
+            process.exit(1);
+        } catch (error) {
+            if (subcommand === 'set' && value) {
+                config.set(key, value);
+                config.saveConfig();
+                console.log(chalk.green('✅ Config updated'));
+                return;
+            }
+            console.error(chalk.red(`❌ Config command failed: ${error.message}`));
+            process.exit(1);
+        }
+    });
+
 // Error handling
 try {
     program.parse(process.argv);
