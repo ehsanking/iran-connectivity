@@ -234,33 +234,37 @@ const IP_RANGES = {
     hetzner_falkenstein_cx22: {
         name: 'Hetzner - Falkenstein, DE (CX22)',
         city: 'Falkenstein',
+        country: 'Germany',
         package: 'CX22',
         lookingGlass: ['https://lg.hetzner.com/'],
-        ranges: ['78.46.0.0/15', '88.198.0.0/16', '159.69.0.0/16']
+        ranges: ['78.46.0.0/15', '88.198.0.0/16', '116.202.0.0/16', '138.201.0.0/16', '159.69.0.0/16', '167.235.0.0/16']
     },
 
     ovh_gravelines_starter: {
         name: 'OVHcloud - Gravelines, FR (Starter VPS)',
         city: 'Gravelines',
+        country: 'France',
         package: 'Starter VPS',
         lookingGlass: ['https://www.ovh.com/world/network/looking-glass/'],
-        ranges: ['51.68.0.0/16', '51.75.0.0/16', '54.36.0.0/15']
+        ranges: ['37.59.0.0/16', '51.68.0.0/16', '51.75.0.0/16', '54.36.0.0/15', '91.121.0.0/16', '188.165.0.0/16']
     },
 
     leaseweb_amsterdam_general: {
         name: 'Leaseweb - Amsterdam, NL (General VPS)',
         city: 'Amsterdam',
+        country: 'Netherlands',
         package: 'General VPS',
         lookingGlass: ['https://lg.leaseweb.com/'],
-        ranges: ['31.31.32.0/19', '85.17.0.0/16', '95.211.0.0/16']
+        ranges: ['31.31.32.0/19', '37.48.0.0/16', '85.17.0.0/16', '85.114.128.0/17', '95.211.0.0/16', '212.32.224.0/19']
     },
 
     contabo_nuremberg_vps_s: {
         name: 'Contabo - Nuremberg, DE (VPS S)',
         city: 'Nuremberg',
+        country: 'Germany',
         package: 'VPS S',
         lookingGlass: ['https://status.contabo.com/'],
-        ranges: ['5.189.128.0/17', '62.171.0.0/16', '161.97.0.0/16']
+        ranges: ['5.189.128.0/17', '62.171.0.0/16', '77.83.196.0/22', '144.76.0.0/16', '161.97.0.0/16', '194.163.128.0/17']
     },
 
     scaleway_paris_dev1s: {
@@ -269,7 +273,7 @@ const IP_RANGES = {
         country: 'France',
         package: 'DEV1-S',
         lookingGlass: ['https://www.scaleway.com/en/network/'],
-        ranges: ['51.15.0.0/16', '62.210.0.0/16', '212.129.0.0/18']
+        ranges: ['51.15.0.0/16', '62.210.0.0/16', '163.172.0.0/16', '195.154.0.0/16', '212.47.224.0/19', '212.129.0.0/18']
     },
 
     vultr_fremont_regular: {

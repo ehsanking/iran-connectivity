@@ -66,7 +66,9 @@ class IranConnectivityAnalyzer {
                 `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/80" 2>/dev/null && echo "TARGET_80_OPEN" || echo "TARGET_80_CLOSED"`,
                 `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/443" 2>/dev/null && echo "TARGET_443_OPEN" || echo "TARGET_443_CLOSED"`,
                 `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/22" 2>/dev/null && echo "TARGET_22_OPEN" || echo "TARGET_22_CLOSED"`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/53" 2>/dev/null && echo "TARGET_53_OPEN" || echo "TARGET_53_CLOSED"`
+                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/53" 2>/dev/null && echo "TARGET_53_OPEN" || echo "TARGET_53_CLOSED"`,
+                `command -v traceroute >/dev/null 2>&1 && traceroute -n -w 1 -q 1 -m 8 ${finalTarget} 2>/dev/null || echo "TRACEROUTE_UNAVAILABLE"`,
+                `command -v mtr >/dev/null 2>&1 && mtr -n -r -c 3 --report-wide ${finalTarget} 2>/dev/null || echo "MTR_UNAVAILABLE"`
             ];
 
             let completedTests = 0;
@@ -80,6 +82,11 @@ class IranConnectivityAnalyzer {
                 port443: false,
                 port22: false,
                 port53: false,
+                tracerouteAvailable: false,
+                tracerouteHops: null,
+                tracerouteReachedTarget: null,
+                mtrAvailable: false,
+                mtrLossPercent: null,
                 responseTime: 0,
                 targetReachability: 0,
                 connectivityScore: 0
@@ -122,6 +129,28 @@ class IranConnectivityAnalyzer {
                             case 6:
                                 results.port53 = output.includes('target_53_open');
                                 break;
+                            case 7: {
+                                if (!output.includes('traceroute_unavailable')) {
+                                    results.tracerouteAvailable = true;
+                                    const tracerLines = output.split('\n').filter(line => /^\s*\d+\s+/.test(line));
+                                    results.tracerouteHops = tracerLines.length;
+                                    const lastHop = tracerLines[tracerLines.length - 1] || '';
+                                    results.tracerouteReachedTarget = lastHop.includes(finalTarget);
+                                }
+                                break;
+                            }
+                            case 8: {
+                                if (!output.includes('mtr_unavailable')) {
+                                    results.mtrAvailable = true;
+                                    const mtrLines = output.split('\n').filter(line => line.includes('|--'));
+                                    const lastMtrLine = mtrLines[mtrLines.length - 1] || '';
+                                    const lossMatch = lastMtrLine.match(/(\d+(?:\.\d+)?)%/);
+                                    if (lossMatch) {
+                                        results.mtrLossPercent = parseFloat(lossMatch[1]);
+                                    }
+                                }
+                                break;
+                            }
                         }
                         checkCompletion();
                     })
@@ -142,15 +171,37 @@ class IranConnectivityAnalyzer {
         if (results.port443) score += 25;
         if (results.port22) score += 7;
         if (results.port53) score += 8;
+        if (results.tracerouteAvailable && results.tracerouteReachedTarget) score += 5;
+        if (results.mtrAvailable && results.mtrLossPercent !== null) {
+            if (results.mtrLossPercent <= 5) score += 5;
+            else if (results.mtrLossPercent <= 20) score += 2;
+        }
         results.targetReachability = Math.min(
             100,
             (results.targetPing ? 30 : 0) +
             (results.port80 ? 20 : 0) +
             (results.port443 ? 30 : 0) +
             (results.port22 ? 10 : 0) +
-            (results.port53 ? 10 : 0)
+            (results.port53 ? 10 : 0) +
+            (results.tracerouteAvailable && results.tracerouteReachedTarget ? 10 : 0)
         );
         return score;
+    }
+
+    getProviderCategoryPriority(providerKey) {
+        const datacenterProviders = new Set([
+            'iranian_data_centers', 'turkish_data_centers', 'emirati_data_centers', 'qatari_data_centers',
+            'russian_data_centers', 'chinese_data_centers', 'hetzner_falkenstein_cx22', 'ovh_gravelines_starter',
+            'leaseweb_amsterdam_general', 'contabo_nuremberg_vps_s', 'scaleway_paris_dev1s',
+            'vultr_fremont_regular', 'digitalocean_fra1_basic'
+        ]);
+        const cdnProviders = new Set(['cloudflare', 'akamai', 'fastly']);
+        const dnsProviders = new Set(['google_dns', 'cloudflare_dns', 'opendns', 'quad9']);
+
+        if (datacenterProviders.has(providerKey)) return 0;
+        if (cdnProviders.has(providerKey)) return 1;
+        if (dnsProviders.has(providerKey)) return 2;
+        return 3;
     }
 
     async runWithConcurrency(tasks, limit) {
@@ -312,6 +363,11 @@ class IranConnectivityAnalyzer {
         const providers = getAllProviders().filter((provider) => {
             if (this.providerKeys.length === 0) return true;
             return this.providerKeys.includes(provider.key);
+        }).sort((a, b) => {
+            const aPriority = this.getProviderCategoryPriority(a.key);
+            const bPriority = this.getProviderCategoryPriority(b.key);
+            if (aPriority !== bPriority) return aPriority - bPriority;
+            return a.name.localeCompare(b.name);
         });
         
         this.log(`شروع آزمایش اتصال به ${providers.length} ارائهدهنده مختلف...`);
