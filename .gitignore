@@ -44,7 +44,6 @@ logs
 .env
 
 # Test files
-*.test.js
 test-results/
 
 # Demo files (keep demo configs)
@@ -78,3 +77,4 @@ connectivity_reports/
 *.json
 !demo.config.json
 !package.json
+!src/report/schema.json
