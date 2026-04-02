@@ -401,6 +401,9 @@ class IranCheckCLI {
         const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
         return ipRegex.test(ip);
     }
+    shellQuote(value) {
+        return `'${String(value).replace(/'/g, `'\\''`)}'`;
+    }
     resolveSelectedProviders(providerList, preset) {
         const fromProviders = (providerList || '')
             .split(',')
@@ -576,8 +579,9 @@ program
             console.error(chalk.red('❌ Target cannot be empty'));
             process.exit(1);
         }
+        const quotedTarget = cli.shellQuote(safeTarget);
         console.log(chalk.blue('\n🧪 OONI CLI one-liner (install + run)\n'));
-        console.log(`curl -fsSL https://get.ooni.org | sh && ooniprobe run web_connectivity --input ${safeTarget}`);
+        console.log(`curl -fsSL https://get.ooni.org | sh && ooniprobe run web_connectivity --input ${quotedTarget}`);
         console.log('\nDocs: https://ooni.org/install/cli/\n');
     });
 program
