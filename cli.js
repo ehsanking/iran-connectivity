@@ -248,18 +248,31 @@ class IranCheckCLI {
     async attachIpApiMetadata(results) {
         if (!results || !Array.isArray(results.detailedResults)) return;
         results.targetIpInfo = await this.fetchIpApiInfo(results.targetIp);
-        for (const provider of results.detailedResults) {
-            if (!provider || !provider.bestConnection || !provider.bestConnection.ip) continue;
-            const info = await this.fetchIpApiInfo(provider.bestConnection.ip);
-            if (!info) continue;
-            provider.bestConnection.ipApi = info;
-            if (!provider.bestConnection.location) {
-                provider.bestConnection.location = {
-                    city: info.city || null,
-                    country: info.country || null
-                };
+        const providersWithBestIp = results.detailedResults.filter((provider) => (
+            provider &&
+            provider.bestConnection &&
+            provider.bestConnection.ip
+        ));
+        const lookupConcurrency = 5;
+        let nextProviderIndex = 0;
+        const runLookupWorker = async () => {
+            while (nextProviderIndex < providersWithBestIp.length) {
+                const providerIndex = nextProviderIndex;
+                nextProviderIndex += 1;
+                const provider = providersWithBestIp[providerIndex];
+                const info = await this.fetchIpApiInfo(provider.bestConnection.ip);
+                if (!info) continue;
+                provider.bestConnection.ipApi = info;
+                if (!provider.bestConnection.location) {
+                    provider.bestConnection.location = {
+                        city: info.city || null,
+                        country: info.country || null
+                    };
+                }
             }
-        }
+        };
+        const workerCount = Math.min(lookupConcurrency, providersWithBestIp.length);
+        await Promise.all(Array.from({ length: workerCount }, () => runLookupWorker()));
     }
     async generateRecommendations(results, options) {
         console.log(chalk.blue('\n🔧 Generating tunnel recommendations...'));
