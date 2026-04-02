@@ -29,9 +29,16 @@ const PROVIDER_PRESETS = {
         'aws',
         'google_cloud',
         'azure',
+        'gcore_frankfurt_general',
+        'gcore_amsterdam_general',
+        'gcore_istanbul_general',
         'hetzner_falkenstein_cx22',
         'ovh_gravelines_starter',
-        'leaseweb_amsterdam_general'
+        'leaseweb_amsterdam_general',
+        'contabo_nuremberg_vps_s',
+        'scaleway_paris_dev1s',
+        'digitalocean_fra1_basic',
+        'vultr_fremont_regular'
     ]
 };
 // Progress bar and spinner utilities
@@ -185,31 +192,41 @@ class IranCheckCLI {
         console.log(chalk.gray('═'.repeat(80)));
     }
     printRecommendation(recommendation, number) {
+        const sanitize = (value, fallback) => {
+            if (typeof value !== 'string') return fallback;
+            return /[\u0600-\u06FF]/.test(value) ? fallback : value;
+        };
+        const sanitizeList = (values, fallbackPrefix) => {
+            if (!Array.isArray(values) || values.length === 0) return [];
+            return values.map((value, index) => sanitize(value, `${fallbackPrefix} ${index + 1}`));
+        };
+
         const isPrimary = recommendation.type === 'primary';
         const titleColor = isPrimary ? chalk.green.bold : chalk.blue;
         const prefix = isPrimary ? '⭐' : '🔸';
-        console.log(`\n${prefix} ${titleColor(`${number}. ${recommendation.protocol.name}`)}`);
+        const protocolName = sanitize(recommendation.protocol?.name, `Protocol option ${number}`);
+        console.log(`\n${prefix} ${titleColor(`${number}. ${protocolName}`)}`);
         
         if (recommendation.confidence) {
             console.log(chalk.yellow(`   Confidence: ${recommendation.confidence}%`));
         }
-        console.log(chalk.white(`   ${recommendation.protocol.description}`));
+        console.log(chalk.white(`   ${sanitize(recommendation.protocol?.description, 'Recommended tunnel protocol based on measured network behavior.')}`));
         if (recommendation.reasoning && recommendation.reasoning.length > 0) {
             console.log(chalk.cyan('   Why:'));
-            recommendation.reasoning.forEach(reason => {
+            sanitizeList(recommendation.reasoning, 'Reason').forEach(reason => {
                 console.log(`     • ${reason}`);
             });
         }
         if (recommendation.useCase) {
-            console.log(chalk.magenta(`   Use case: ${recommendation.useCase}`));
+            console.log(chalk.magenta(`   Use case: ${sanitize(recommendation.useCase, 'Use when you need stable and resilient connectivity.')}`));
         }
         // Print advantages and disadvantages
         console.log(chalk.green('   ✅ Advantages:'));
-        recommendation.protocol.advantages.forEach(advantage => {
+        sanitizeList(recommendation.protocol?.advantages, 'Advantage').forEach(advantage => {
             console.log(`     ✓ ${advantage}`);
         });
         console.log(chalk.red('   ⚠️ Trade-offs:'));
-        recommendation.protocol.disadvantages.forEach(disadvantage => {
+        sanitizeList(recommendation.protocol?.disadvantages, 'Trade-off').forEach(disadvantage => {
             console.log(`     ✗ ${disadvantage}`);
         });
         // Print implementation guide for primary recommendation
@@ -219,13 +236,13 @@ class IranCheckCLI {
             
             if (impl.requirements && impl.requirements.length > 0) {
                 console.log(chalk.yellow('   Prerequisites:'));
-                impl.requirements.forEach(req => {
+                sanitizeList(impl.requirements, 'Prerequisite').forEach(req => {
                     console.log(`     • ${req}`);
                 });
             }
             if (impl.steps && impl.steps.length > 0) {
                 console.log(chalk.yellow('   Steps:'));
-                impl.steps.forEach((step, i) => {
+                sanitizeList(impl.steps, 'Step').forEach((step, i) => {
                     console.log(`     ${i + 1}. ${step}`);
                 });
             }
@@ -233,7 +250,7 @@ class IranCheckCLI {
         // Print next steps
         if (recommendation.nextSteps && recommendation.nextSteps.length > 0) {
             console.log(chalk.cyan('\n   Next steps:'));
-            recommendation.nextSteps.forEach((step, i) => {
+            sanitizeList(recommendation.nextSteps, 'Next step').forEach((step, i) => {
                 console.log(`     ${i + 1}. ${step}`);
             });
         }
@@ -269,10 +286,23 @@ class IranCheckCLI {
                     console.log(chalk.green(`\n   ${provider.name}:`));
                     console.log(`     • Successful paths: ${provider.successfulConnections.length}`);
                     console.log(`     • Best score: ${provider.connectivityScore}`);
+                    const groupedByRange = provider.successfulConnections.reduce((acc, conn) => {
+                        const range = conn.testedCidr || 'Unknown range';
+                        if (!acc[range]) acc[range] = 0;
+                        acc[range] += 1;
+                        return acc;
+                    }, {});
+                    console.log('     • Results by tested range:');
+                    Object.entries(groupedByRange).forEach(([range, count]) => {
+                        console.log(`       - ${range}: ${count} successful path(s)`);
+                    });
                     
                     if (provider.bestConnection) {
                         const conn = provider.bestConnection;
                         console.log(`     • Best IP: ${conn.ip}`);
+                        if (conn.testedCidr) {
+                            console.log(`     • Tested range: ${conn.testedCidr}`);
+                        }
                         if (conn.location && (conn.location.city || conn.location.country)) {
                             const city = conn.location.city || 'Unknown';
                             const country = conn.location.country || 'Unknown';
@@ -280,13 +310,20 @@ class IranCheckCLI {
                         }
                         console.log(`     • Source ping: ${conn.sourcePing ? '✓' : '✗'}`);
                         console.log(`     • Target ping (${results.targetIp}): ${conn.targetPing ? '✓' : '✗'}`);
+                        if (conn.stageResults) {
+                            console.log(`     • Stage 1 (Ping): ${conn.stageResults.ping}`);
+                            console.log(`     • Stage 2 (Traceroute): ${conn.stageResults.traceroute}`);
+                            console.log(`     • Stage 3 (BGP): ${conn.stageResults.bgp}`);
+                        }
                         console.log(`     • Target port 80: ${conn.port80 ? '✓' : '✗'}`);
                         console.log(`     • Target port 443: ${conn.port443 ? '✓' : '✗'}`);
                         if (conn.tracerouteAvailable) {
                             console.log(`     • Traceroute to target: ${conn.tracerouteReachedTarget ? '✓' : '✗'} (hop: ${conn.tracerouteHops ?? 'N/A'})`);
                         }
-                        if (conn.mtrAvailable) {
-                            console.log(`     • mtr packet loss: ${conn.mtrLossPercent ?? 'N/A'}%`);
+                        if (conn.bgpCheckAvailable) {
+                            console.log(`     • BGP origin ASN: ${conn.bgpOriginAsn ?? 'N/A'}`);
+                            console.log(`     • BGP prefix: ${conn.bgpPrefix ?? 'N/A'}`);
+                            console.log(`     • BGP registry: ${conn.bgpRegistry ?? 'N/A'}`);
                         }
                         console.log(`     • Target reachability: ${conn.targetReachability || 0}%`);
                     }
@@ -325,7 +362,7 @@ class IranCheckCLI {
         }
     }
     convertToCsv(results) {
-        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Best IP Location,Port 80,Port 443,Port 22,Port 53,Traceroute Reached Target,MTR Loss %\n';
+        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Tested Range,Best IP Location,Ping Stage,Traceroute Stage,BGP Stage,Port 80,Port 443,Port 22,Port 53,Traceroute Reached Target,BGP ASN,BGP Prefix,BGP Registry\n';
         
         results.detailedResults.forEach(provider => {
             const successRate = provider.ranges.length > 0 
@@ -337,7 +374,7 @@ class IranCheckCLI {
                 ? `${bestConn.location.city || 'Unknown City'}, ${bestConn.location.country || 'Unknown Country'}`
                 : 'N/A';
             
-            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestLocation},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false},${bestConn.tracerouteReachedTarget ?? 'N/A'},${bestConn.mtrLossPercent ?? 'N/A'}\n`;
+            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestConn.testedCidr || 'N/A'},${bestLocation},${bestConn.stageResults?.ping || 'N/A'},${bestConn.stageResults?.traceroute || 'N/A'},${bestConn.stageResults?.bgp || 'N/A'},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false},${bestConn.tracerouteReachedTarget ?? 'N/A'},${bestConn.bgpOriginAsn ?? 'N/A'},${bestConn.bgpPrefix ?? 'N/A'},${bestConn.bgpRegistry ?? 'N/A'}\n`;
         });
         
         return csv;
