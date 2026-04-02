@@ -1,7 +1,23 @@
-const { runCommand } = require('./common');
+const { isValidIPv4, runCommand } = require('./common');
 
-async function run(target, context) {
-    const timeout = context.timeoutSeconds || 5;
+function normalizeTimeoutSeconds(value, fallback = 5) {
+    const parsed = Number.parseInt(String(value), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.min(parsed, 60);
+}
+
+async function run(target, context = {}) {
+    if (!isValidIPv4(target)) {
+        return {
+            level: 'L3',
+            name: 'icmp-ping',
+            ok: false,
+            details: 'Target is not a valid IPv4 address',
+            meta: { commandOk: false, commandSkipped: true }
+        };
+    }
+
+    const timeout = normalizeTimeoutSeconds(context.timeoutSeconds);
     const result = await runCommand(`ping -c 1 -W ${timeout} ${target}`, timeout * 1000 + 1000);
     const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
     const ok = result.ok && (output.includes('1 received') || output.includes('0% packet loss'));
@@ -15,4 +31,4 @@ async function run(target, context) {
     };
 }
 
-module.exports = { run };
+module.exports = { run, normalizeTimeoutSeconds };
