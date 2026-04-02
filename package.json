@@ -11,6 +11,8 @@
     "analyze": "node cli.js analyze",
     "providers": "node cli.js providers",
     "test": "node test.js",
+    "test:accuracy": "node --test tests/*.test.js",
+    "test:all": "npm run test && npm run test:accuracy",
     "help": "node cli.js --help"
   },
   "keywords": [

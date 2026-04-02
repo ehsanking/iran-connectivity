@@ -41,6 +41,9 @@ node cli.js providers
 
 # Get tunnel recommendations
 node cli.js recommend connectivity_report.json
+
+# Show additional measurement tools for higher-accuracy testing
+node cli.js toolkit
 ```
 
 **فارسی:**
