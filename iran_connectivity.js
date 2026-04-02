@@ -110,13 +110,17 @@ ${error.stderr || ''}`;
             bgpOriginAsn: null,
             bgpPrefix: null,
             bgpRegistry: null,
+            mtrAvailable: false,
+            mtrLossPercent: null,
+            mtrRawSample: null,
             responseTime: 0,
             targetReachability: 0,
             connectivityScore: 0,
             stageResults: {
                 ping: 'failed',
                 traceroute: 'skipped',
-                bgp: 'skipped'
+                bgp: 'skipped',
+                mtr: 'skipped'
             },
             sourcePingStats: null,
             targetPingStats: null
@@ -182,6 +186,27 @@ ${error.stderr || ''}`;
                 }
             } else {
                 results.stageResults.bgp = 'unavailable';
+            }
+
+            const mtr = await this.runShellCheck(`command -v mtr >/dev/null 2>&1 && mtr -n -r -c 3 --report ${finalTarget} 2>/dev/null || echo "MTR_UNAVAILABLE"`);
+            const mtrOutput = mtr.output || '';
+            if (!mtrOutput.toLowerCase().includes('mtr_unavailable')) {
+                results.mtrAvailable = true;
+                const mtrLines = mtrOutput
+                    .split('\n')
+                    .map((line) => line.trim())
+                    .filter((line) => line && !line.toLowerCase().startsWith('start:') && !line.toLowerCase().startsWith('host:') && !line.toLowerCase().includes('loss%'));
+                const lastHop = mtrLines[mtrLines.length - 1] || '';
+                results.mtrRawSample = lastHop || null;
+                const lossMatch = lastHop.match(/(\d+(?:\.\d+)?)%/);
+                if (lossMatch) {
+                    results.mtrLossPercent = Number(lossMatch[1]);
+                    results.stageResults.mtr = results.mtrLossPercent <= 20 ? 'passed' : 'failed';
+                } else {
+                    results.stageResults.mtr = 'no-data';
+                }
+            } else {
+                results.stageResults.mtr = 'unavailable';
             }
         }
 
