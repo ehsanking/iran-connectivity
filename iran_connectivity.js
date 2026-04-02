@@ -16,7 +16,10 @@ const execAsync = promisify(exec);
 
 class IranConnectivityAnalyzer {
     constructor(options = {}) {
-        process.emitWarning('iran_connectivity.js is deprecated. Please use the src/core/pipeline verify flow.', { code: 'IRAN_CONNECTIVITY_DEPRECATED' });
+        if (!IranConnectivityAnalyzer.deprecationWarningShown) {
+            process.emitWarning('iran_connectivity.js is deprecated. Please use the src/core/pipeline verify flow.', { code: 'IRAN_CONNECTIVITY_DEPRECATED' });
+            IranConnectivityAnalyzer.deprecationWarningShown = true;
+        }
         this.targetIp = options.targetIp || process.argv[2];
         this.timeout = options.timeout || 5; // seconds
         this.maxConcurrent = options.maxConcurrent || 50;
@@ -550,5 +553,7 @@ if (require.main === module) {
         process.exit(1);
     });
 }
+
+IranConnectivityAnalyzer.deprecationWarningShown = false;
 
 module.exports = IranConnectivityAnalyzer;
