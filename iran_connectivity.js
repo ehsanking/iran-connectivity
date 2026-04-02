@@ -21,6 +21,7 @@ class IranConnectivityAnalyzer {
         this.maxConcurrent = options.maxConcurrent || 50;
         this.outputFile = options.outputFile || 'connectivity_report.json';
         this.verbose = options.verbose || false;
+        this.providerKeys = Array.isArray(options.providerKeys) ? options.providerKeys : [];
         
         this.results = {
             timestamp: new Date().toISOString(),
@@ -52,30 +53,35 @@ class IranConnectivityAnalyzer {
         }
     }
 
-    async testConnectivity(ip, port = 80) {
+    async testConnectivity(sourceCandidateIp, targetIp) {
         return new Promise((resolve) => {
             const startTime = Date.now();
             
-            // Try multiple methods to test connectivity
+            const finalTarget = targetIp || this.targetIp;
+            // Run both source-reachability checks and target reachability checks
             const tests = [
-                // Basic ping test
-                `ping -c 1 -W ${this.timeout} ${ip}`,
-                // TCP connection test on common ports
-                `timeout ${this.timeout} bash -c "</dev/tcp/${ip}/80" 2>/dev/null && echo "Port 80 open" || echo "Port 80 closed"`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${ip}/443" 2>/dev/null && echo "Port 443 open" || echo "Port 443 closed"`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${ip}/22" 2>/dev/null && echo "Port 22 open" || echo "Port 22 closed"`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${ip}/53" 2>/dev/null && echo "Port 53 open" || echo "Port 53 closed"`
+                `ping -c 1 -W ${this.timeout} ${sourceCandidateIp}`,
+                `timeout ${this.timeout} bash -c "</dev/tcp/${sourceCandidateIp}/443" 2>/dev/null && echo "SOURCE_443_OPEN" || echo "SOURCE_443_CLOSED"`,
+                `ping -c 1 -W ${this.timeout} ${finalTarget}`,
+                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/80" 2>/dev/null && echo "TARGET_80_OPEN" || echo "TARGET_80_CLOSED"`,
+                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/443" 2>/dev/null && echo "TARGET_443_OPEN" || echo "TARGET_443_CLOSED"`,
+                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/22" 2>/dev/null && echo "TARGET_22_OPEN" || echo "TARGET_22_CLOSED"`,
+                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/53" 2>/dev/null && echo "TARGET_53_OPEN" || echo "TARGET_53_CLOSED"`
             ];
 
             let completedTests = 0;
             let results = {
-                ip: ip,
-                ping: false,
+                ip: sourceCandidateIp,
+                targetIp: finalTarget,
+                sourcePing: false,
+                sourcePort443: false,
+                targetPing: false,
                 port80: false,
                 port443: false,
                 port22: false,
                 port53: false,
                 responseTime: 0,
+                targetReachability: 0,
                 connectivityScore: 0
             };
 
@@ -95,20 +101,26 @@ class IranConnectivityAnalyzer {
                     .then(({ stdout, stderr }) => {
                         const output = stdout.toString().toLowerCase();
                         switch (index) {
-                            case 0: // ping
-                                results.ping = output.includes('1 received') || output.includes('0% packet loss');
+                            case 0:
+                                results.sourcePing = output.includes('1 received') || output.includes('0% packet loss');
                                 break;
-                            case 1: // port 80
-                                results.port80 = output.includes('port 80 open');
+                            case 1:
+                                results.sourcePort443 = output.includes('source_443_open');
                                 break;
-                            case 2: // port 443
-                                results.port443 = output.includes('port 443 open');
+                            case 2:
+                                results.targetPing = output.includes('1 received') || output.includes('0% packet loss');
                                 break;
-                            case 3: // port 22
-                                results.port22 = output.includes('port 22 open');
+                            case 3:
+                                results.port80 = output.includes('target_80_open');
                                 break;
-                            case 4: // port 53
-                                results.port53 = output.includes('port 53 open');
+                            case 4:
+                                results.port443 = output.includes('target_443_open');
+                                break;
+                            case 5:
+                                results.port22 = output.includes('target_22_open');
+                                break;
+                            case 6:
+                                results.port53 = output.includes('target_53_open');
                                 break;
                         }
                         checkCompletion();
@@ -123,12 +135,39 @@ class IranConnectivityAnalyzer {
 
     calculateConnectivityScore(results) {
         let score = 0;
-        if (results.ping) score += 20;
-        if (results.port80) score += 25;
+        if (results.sourcePing) score += 10;
+        if (results.sourcePort443) score += 10;
+        if (results.targetPing) score += 20;
+        if (results.port80) score += 20;
         if (results.port443) score += 25;
-        if (results.port22) score += 15;
-        if (results.port53) score += 15;
+        if (results.port22) score += 7;
+        if (results.port53) score += 8;
+        results.targetReachability = Math.min(
+            100,
+            (results.targetPing ? 30 : 0) +
+            (results.port80 ? 20 : 0) +
+            (results.port443 ? 30 : 0) +
+            (results.port22 ? 10 : 0) +
+            (results.port53 ? 10 : 0)
+        );
         return score;
+    }
+
+    async runWithConcurrency(tasks, limit) {
+        const concurrency = Math.max(1, limit || this.maxConcurrent);
+        const results = [];
+        let index = 0;
+
+        const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+            while (true) {
+                const current = index++;
+                if (current >= tasks.length) return;
+                results[current] = await tasks[current]();
+            }
+        });
+
+        await Promise.all(workers);
+        return results;
     }
 
     async testProviderConnectivity(providerKey, providerInfo) {
@@ -144,36 +183,31 @@ class IranConnectivityAnalyzer {
 
         this.log(`Testing connectivity to ${providerInfo.name} (${providerInfo.ranges.length} ranges)`);
 
-        for (const cidrRange of providerInfo.ranges) {
-            // Test a sample of IPs from each range to avoid testing every IP
-            const sampleIps = this.getSampleIpsFromCidr(cidrRange, 5); // Test 5 IPs per range
-            
-            for (const ip of sampleIps) {
-                if (!this.isRunning) break;
-                
-                try {
-                    const result = await this.testConnectivity(ip);
-                    
-                    if (result.connectivityScore > 0) {
-                        providerResults.successfulConnections.push(result);
-                        if (!providerResults.bestConnection || 
-                            result.connectivityScore > providerResults.bestConnection.connectivityScore) {
-                            providerResults.bestConnection = result;
-                        }
-                        this.log(`✓ Connection successful to ${ip} (Score: ${result.connectivityScore})`, 'success');
-                    } else {
-                        providerResults.failedConnections.push(result);
-                        this.log(`✗ Connection failed to ${ip}`, 'error');
-                    }
-                    
-                    // Wait a bit to avoid overwhelming the network
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                } catch (error) {
-                    this.log(`Error testing ${ip}: ${error.message}`, 'error');
-                }
+        const sampleIps = providerInfo.ranges.flatMap((cidrRange) => this.getSampleIpsFromCidr(cidrRange, 2));
+        const tasks = sampleIps.map((ip) => async () => {
+            if (!this.isRunning) return null;
+            try {
+                return await this.testConnectivity(ip, this.targetIp);
+            } catch (error) {
+                this.log(`Error testing ${ip}: ${error.message}`, 'error');
+                return null;
             }
-        }
+        });
+
+        const testResults = await this.runWithConcurrency(tasks, this.maxConcurrent);
+        testResults.filter(Boolean).forEach((result) => {
+            if (result.connectivityScore > 0) {
+                providerResults.successfulConnections.push(result);
+                if (!providerResults.bestConnection ||
+                    result.connectivityScore > providerResults.bestConnection.connectivityScore) {
+                    providerResults.bestConnection = result;
+                }
+                this.log(`✓ Connection path score ${result.ip} -> ${this.targetIp} (${result.connectivityScore})`, 'success');
+            } else {
+                providerResults.failedConnections.push(result);
+                this.log(`✗ Connection path failed ${result.ip} -> ${this.targetIp}`, 'error');
+            }
+        });
 
         // Calculate overall provider connectivity score
         if (providerResults.successfulConnections.length > 0) {
@@ -238,7 +272,10 @@ class IranConnectivityAnalyzer {
 `);
 
         this.isRunning = true;
-        const providers = getAllProviders();
+        const providers = getAllProviders().filter((provider) => {
+            if (this.providerKeys.length === 0) return true;
+            return this.providerKeys.includes(provider.key);
+        });
         
         this.log(`شروع آزمایش اتصال به ${providers.length} ارائهدهنده مختلف...`);
         this.log(`آی‌پی هدف: ${this.targetIp}`);

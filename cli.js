@@ -19,21 +19,26 @@ const { getAllProviders, IP_RANGES } = require('./ip_ranges');
 
 // ASCII Art Banner
 const BANNER = `
-${chalk.cyan.bold(`
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║     ██  █████  ██    ██  ██████  ████████  ██████  ██    ██  ██████       ║
-║     ██ ██   ██ ██    ██ ██    ██    ██    ██   ██  ██  ██  ██            ║
-║     ██ ███████ ██    ██ ██    ██    ██    ██████    ████   ███████        ║
-║ ██   ██ ██   ██  ██  ██  ██    ██    ██    ██   ██    ██     ██   ██      ║
-║  █████  ██   ██   ████    ██████     ██    ██   ██    ██     ██   ██      ║
-║                                                                              ║
-║                  ${chalk.white.bold('Internet Access Analysis Tool for Iran')}                      ║
-║                                                                              ║
-║  ${chalk.yellow('برای حفظ آزادی اینترنت در ایران - For maintaining internet freedom')}   ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-`)}`;
+${chalk.cyan.bold('╔══════════════════════════════════════════════════════════╗')}
+${chalk.cyan.bold('║                                                          ║')}
+${chalk.cyan.bold(`║${chalk.white.bold('                      IRAN CHECK                          ')}║`)}
+${chalk.cyan.bold('║                                                          ║')}
+${chalk.cyan.bold(`║${chalk.yellow('   Iran connectivity analysis for censorship resilience   ')}║`)}
+${chalk.cyan.bold('║                                                          ║')}
+${chalk.cyan.bold('╚══════════════════════════════════════════════════════════╝')}
+`;
+
+const PROVIDER_PRESETS = {
+    famous: [
+        'cloudflare',
+        'aws',
+        'google_cloud',
+        'azure',
+        'hetzner_falkenstein_cx22',
+        'ovh_gravelines_starter',
+        'leaseweb_amsterdam_general'
+    ]
+};
 
 // Progress bar and spinner utilities
 class ProgressManager {
@@ -93,8 +98,10 @@ class IranCheckCLI {
         this.recommendationEngine = new TunnelRecommendationEngine();
     }
 
-    printBanner() {
-        console.log(BANNER);
+    printBanner(enabled = true) {
+        if (enabled) {
+            console.log(BANNER);
+        }
     }
 
     printWelcome() {
@@ -105,7 +112,7 @@ class IranCheckCLI {
 
     async runAnalysis(targetIp, options) {
         try {
-            this.printBanner();
+            this.printBanner(options.banner !== false);
             this.printWelcome();
 
             // Validate target IP
@@ -122,13 +129,26 @@ class IranCheckCLI {
             this.printWhoisInfo(targetIp);
             this.printLookingGlassReferences();
 
+            const selectedProviders = this.resolveSelectedProviders(options.providers, options.preset);
+            if (selectedProviders.length > 0) {
+                console.log(chalk.cyan(`🎯 ارائه‌دهندگان انتخاب‌شده برای تست: ${selectedProviders.length}`));
+                selectedProviders.forEach((providerKey) => {
+                    const provider = IP_RANGES[providerKey];
+                    if (provider) {
+                        console.log(`   • ${provider.name}`);
+                    }
+                });
+                console.log();
+            }
+
             // Initialize analyzer
             this.analyzer = new IranConnectivityAnalyzer({
                 targetIp: targetIp,
                 timeout: options.timeout,
                 maxConcurrent: options.concurrent,
                 outputFile: options.output,
-                verbose: options.verbose
+                verbose: options.verbose,
+                providerKeys: selectedProviders
             });
 
             // Override analyzer's log method to use progress manager
@@ -298,9 +318,11 @@ class IranCheckCLI {
                     if (provider.bestConnection) {
                         const conn = provider.bestConnection;
                         console.log(`     • بهترین آی‌پی: ${conn.ip}`);
-                        console.log(`     • پینگ: ${conn.ping ? '✓' : '✗'}`);
-                        console.log(`     • پورت 80: ${conn.port80 ? '✓' : '✗'}`);
-                        console.log(`     • پورت 443: ${conn.port443 ? '✓' : '✗'}`);
+                        console.log(`     • پینگ مبدا: ${conn.sourcePing ? '✓' : '✗'}`);
+                        console.log(`     • پینگ مقصد (${results.targetIp}): ${conn.targetPing ? '✓' : '✗'}`);
+                        console.log(`     • پورت 80 مقصد: ${conn.port80 ? '✓' : '✗'}`);
+                        console.log(`     • پورت 443 مقصد: ${conn.port443 ? '✓' : '✗'}`);
+                        console.log(`     • هدف‌پذیری مقصد: ${conn.targetReachability || 0}%`);
                     }
                 }
             });
@@ -382,6 +404,18 @@ class IranCheckCLI {
     validateIp(ip) {
         const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
         return ipRegex.test(ip);
+    }
+
+    resolveSelectedProviders(providerList, preset) {
+        const fromProviders = (providerList || '')
+            .split(',')
+            .map(item => item.trim().toLowerCase())
+            .filter(Boolean);
+
+        const fromPreset = preset && PROVIDER_PRESETS[preset] ? PROVIDER_PRESETS[preset] : [];
+        const merged = [...new Set([...fromProviders, ...fromPreset])];
+
+        return merged.filter((providerKey) => Boolean(IP_RANGES[providerKey]));
     }
 
     printWhoisInfo(targetIp) {
@@ -501,11 +535,14 @@ program
     .command('analyze <targetIp>')
     .description('تحلیل اتصال به سرور ایران')
     .option('-t, --timeout <seconds>', 'تایماوت برای هر تست', '5')
-    .option('-c, --concurrent <number>', 'حداکثر تستهای همزمان', '50')
+    .option('-c, --concurrent <number>', 'حداکثر تستهای همزمان', '80')
     .option('-o, --output <file>', 'فایل خروجی JSON', 'connectivity_report.json')
     .option('-e, --export <format>', 'خروجی با فرمت خاص (json, csv, txt)')
     .option('-d, --detailed', 'نمایش گزارش دقیق')
     .option('-v, --verbose', 'نمایش لاگهای کامل')
+    .option('--providers <list>', 'لیست providerها با کاما (مثال: cloudflare,aws)')
+    .option('--preset <name>', 'preset ارائه‌دهنده‌ها (famous)')
+    .option('--no-banner', 'عدم نمایش بنر')
     .action(async (targetIp, options) => {
         const cli = new IranCheckCLI();
         await cli.runAnalysis(targetIp, {
@@ -514,7 +551,10 @@ program
             output: options.output,
             export: options.export,
             detailed: options.detailed,
-            verbose: options.verbose
+            verbose: options.verbose,
+            providers: options.providers,
+            preset: options.preset,
+            banner: options.banner
         });
     });
 
