@@ -7,6 +7,8 @@ async function run(target, context) {
     return {
         level: 'L5',
         name: 'tcp-80',
+        port: 80,
+        protocol: 'tcp',
         ok: result.ok,
         details: result.ok ? 'TCP/80 is reachable' : `TCP/80 failed: ${result.error || 'unknown'}`
     };
