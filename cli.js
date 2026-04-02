@@ -576,8 +576,9 @@ program
             console.error(chalk.red('❌ Target cannot be empty'));
             process.exit(1);
         }
+        const shellQuotedTarget = `'${safeTarget.replace(/'/g, `'\\''`)}'`;
         console.log(chalk.blue('\n🧪 OONI CLI one-liner (install + run)\n'));
-        console.log(`curl -fsSL https://get.ooni.org | sh && ooniprobe run web_connectivity --input ${safeTarget}`);
+        console.log(`curl -fsSL https://get.ooni.org | sh && ooniprobe run web_connectivity --input ${shellQuotedTarget}`);
         console.log('\nDocs: https://ooni.org/install/cli/\n');
     });
 program

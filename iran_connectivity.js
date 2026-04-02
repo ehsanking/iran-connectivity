@@ -97,28 +97,38 @@ ${error.stderr || ''}`;
         };
 
         // Baseline checks (kept lightweight for performance scoring)
-        const sourcePing = await this.runShellCheck(`ping -c 1 -W ${this.timeout} ${sourceCandidateIp}`);
+        const [
+            sourcePing,
+            source443,
+            targetPing,
+            target80,
+            target443,
+            target22,
+            target53
+        ] = await Promise.all([
+            this.runShellCheck(`ping -c 1 -W ${this.timeout} ${sourceCandidateIp}`),
+            this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${sourceCandidateIp}/443" 2>/dev/null && echo "SOURCE_443_OPEN" || echo "SOURCE_443_CLOSED"`),
+            this.runShellCheck(`ping -c 1 -W ${this.timeout} ${finalTarget}`),
+            this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/80" 2>/dev/null && echo "TARGET_80_OPEN" || echo "TARGET_80_CLOSED"`),
+            this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/443" 2>/dev/null && echo "TARGET_443_OPEN" || echo "TARGET_443_CLOSED"`),
+            this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/22" 2>/dev/null && echo "TARGET_22_OPEN" || echo "TARGET_22_CLOSED"`),
+            this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/53" 2>/dev/null && echo "TARGET_53_OPEN" || echo "TARGET_53_CLOSED"`)
+        ]);
+
         const sourcePingOutput = sourcePing.output.toLowerCase();
         results.sourcePing = sourcePingOutput.includes('1 received') || sourcePingOutput.includes('0% packet loss');
-
-        const source443 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${sourceCandidateIp}/443" 2>/dev/null && echo "SOURCE_443_OPEN" || echo "SOURCE_443_CLOSED"`);
         results.sourcePort443 = source443.output.toLowerCase().includes('source_443_open');
 
-        const targetPing = await this.runShellCheck(`ping -c 1 -W ${this.timeout} ${finalTarget}`);
         const targetPingOutput = targetPing.output.toLowerCase();
         results.targetPing = targetPingOutput.includes('1 received') || targetPingOutput.includes('0% packet loss');
         results.stageResults.ping = results.targetPing ? 'passed' : 'failed';
 
-        const target80 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/80" 2>/dev/null && echo "TARGET_80_OPEN" || echo "TARGET_80_CLOSED"`);
         results.port80 = target80.output.toLowerCase().includes('target_80_open');
 
-        const target443 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/443" 2>/dev/null && echo "TARGET_443_OPEN" || echo "TARGET_443_CLOSED"`);
         results.port443 = target443.output.toLowerCase().includes('target_443_open');
 
-        const target22 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/22" 2>/dev/null && echo "TARGET_22_OPEN" || echo "TARGET_22_CLOSED"`);
         results.port22 = target22.output.toLowerCase().includes('target_22_open');
 
-        const target53 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/53" 2>/dev/null && echo "TARGET_53_OPEN" || echo "TARGET_53_CLOSED"`);
         results.port53 = target53.output.toLowerCase().includes('target_53_open');
 
         // Stage 2: traceroute only if ping is successful
@@ -147,7 +157,7 @@ ${error.stderr || ''}`;
                     results.bgpCheckAvailable = true;
                     results.bgpOriginAsn = parts[0] || null;
                     results.bgpPrefix = parts[2] || null;
-                    results.bgpRegistry = parts[3] || null;
+                    results.bgpRegistry = parts[4] || null;
                     results.stageResults.bgp = 'passed';
                 } else {
                     results.stageResults.bgp = 'no-data';
