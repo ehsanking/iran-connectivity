@@ -14,6 +14,10 @@ const { spawnSync } = require('child_process');
 const IranConnectivityAnalyzer = require('./iran_connectivity');
 const { TunnelRecommendationEngine } = require('./tunnel_recommendations');
 const { getAllProviders, IP_RANGES } = require('./ip_ranges');
+const { ConfigManager } = require('./config_manager');
+const { runPipeline } = require('./src/core/pipeline');
+const { startAgentServer } = require('./src/core/agent');
+const { runDistributed } = require('./src/core/controller');
 // ASCII Art Banner
 const BANNER = `
 ${chalk.cyan.bold('╔══════════════════════════════════════════════════════════╗')}
@@ -676,6 +680,101 @@ program
             process.exit(1);
         }
     });
+
+program
+    .command('verify <target>')
+    .description('Run pipeline verification L1..L7 for a target')
+    .option('-t, --timeout <seconds>', 'Timeout per check', '5')
+    .option('-o, --output <file>', 'Output file path')
+    .action(async (target, options) => {
+        try {
+            const configManager = new ConfigManager();
+            const timeoutSeconds = Number(options.timeout || configManager.get('network.timeout') || 5);
+            const report = await runPipeline(target, { timeoutSeconds });
+            const body = JSON.stringify(report, null, 2);
+            if (options.output) {
+                fs.writeFileSync(options.output, body);
+                console.log(chalk.green(`✅ Verify report saved to ${options.output}`));
+            } else {
+                console.log(body);
+            }
+        } catch (error) {
+            console.error(chalk.red(`❌ Verify failed: ${error.message}`));
+            process.exit(1);
+        }
+    });
+
+program
+    .command('agent')
+    .description('Agent operations')
+    .command('serve')
+    .description('Start verify listener agent')
+    .option('--host <host>', 'Bind host', '127.0.0.1')
+    .option('--port <port>', 'Bind port', '9090')
+    .action(async (options) => {
+        const agent = await startAgentServer({ host: options.host, port: Number(options.port) });
+        console.log(chalk.green(`✅ Agent listening on http://${agent.host}:${agent.port}`));
+    });
+
+program
+    .command('controller')
+    .description('Controller operations')
+    .command('run')
+    .description('Run distributed checks from an inventory file')
+    .requiredOption('--inventory <file>', 'Inventory JSON file')
+    .option('-t, --timeout <seconds>', 'Timeout per check', '5')
+    .option('-o, --output <file>', 'Output file path', 'controller_report.json')
+    .action(async (options) => {
+        try {
+            const report = await runDistributed(options.inventory, { timeoutSeconds: Number(options.timeout) });
+            fs.writeFileSync(options.output, JSON.stringify(report, null, 2));
+            console.log(chalk.green(`✅ Controller report saved to ${options.output}`));
+        } catch (error) {
+            console.error(chalk.red(`❌ Controller run failed: ${error.message}`));
+            process.exit(1);
+        }
+    });
+
+program
+    .command('config <subcommand> [key] [value]')
+    .description('Manage runtime configuration via config_manager')
+    .action((subcommand, key, value) => {
+        const config = new ConfigManager();
+        try {
+            if (subcommand === 'show') {
+                console.log(config.toString());
+                return;
+            }
+            if (subcommand === 'get') {
+                console.log(JSON.stringify(config.get(key), null, 2));
+                return;
+            }
+            if (subcommand === 'set') {
+                const parsed = value ? JSON.parse(value) : value;
+                config.set(key, parsed);
+                config.saveConfig();
+                console.log(chalk.green('✅ Config updated'));
+                return;
+            }
+            if (subcommand === 'validate') {
+                const result = config.validateConfig();
+                console.log(JSON.stringify(result, null, 2));
+                return;
+            }
+            console.error(chalk.red('❌ Unknown config subcommand'));
+            process.exit(1);
+        } catch (error) {
+            if (subcommand === 'set' && value) {
+                config.set(key, value);
+                config.saveConfig();
+                console.log(chalk.green('✅ Config updated'));
+                return;
+            }
+            console.error(chalk.red(`❌ Config command failed: ${error.message}`));
+            process.exit(1);
+        }
+    });
+
 // Error handling
 try {
     program.parse(process.argv);
