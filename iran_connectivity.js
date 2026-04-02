@@ -219,15 +219,17 @@ ${error.stderr || ''}`;
         let score = 0;
         if (results.sourcePing) score += 10;
         if (results.sourcePort443) score += 10;
-        if (results.targetPing) score += 20;
-        if (results.port80) score += 20;
-        if (results.port443) score += 25;
-        if (results.port22) score += 7;
-        if (results.port53) score += 8;
-        if (results.tracerouteAvailable && results.tracerouteReachedTarget) score += 5;
-        if (results.mtrAvailable && results.mtrLossPercent !== null) {
-            if (results.mtrLossPercent <= 5) score += 5;
-            else if (results.mtrLossPercent <= 20) score += 2;
+        if (results.targetPing) {
+            score += 20;
+            if (results.port80) score += 20;
+            if (results.port443) score += 25;
+            if (results.port22) score += 7;
+            if (results.port53) score += 8;
+            if (results.tracerouteAvailable && results.tracerouteReachedTarget) score += 5;
+            if (results.mtrAvailable && results.mtrLossPercent !== null) {
+                if (results.mtrLossPercent <= 5) score += 5;
+                else if (results.mtrLossPercent <= 20) score += 2;
+            }
         }
         results.targetReachability = Math.min(
             100,
@@ -305,23 +307,26 @@ ${error.stderr || ''}`;
 
         const testResults = await this.runWithConcurrency(tasks, this.maxConcurrent);
         testResults.filter(Boolean).forEach((result) => {
-            if (result.connectivityScore > 0) {
+            const isMtrPassed = result.stageResults?.mtr === 'passed';
+            const pingStats = result.targetPingStats || {};
+            const pingBadge = (pingStats.transmitted !== null && pingStats.received !== null)
+                ? `{ping ${pingStats.received}/${pingStats.transmitted}}`
+                : '{ping N/A}';
+            const latencyBadge = pingStats.averageLatencyMs !== null
+                ? `{latency ${pingStats.averageLatencyMs} ms}`
+                : '{latency N/A}';
+
+            if (isMtrPassed) {
                 providerResults.successfulConnections.push(result);
                 if (!providerResults.bestConnection ||
                     result.connectivityScore > providerResults.bestConnection.connectivityScore) {
                     providerResults.bestConnection = result;
                 }
-                const pingStats = result.targetPingStats || {};
-                const pingBadge = (pingStats.transmitted !== null && pingStats.received !== null)
-                    ? `{ping ${pingStats.received}/${pingStats.transmitted}}`
-                    : '{ping N/A}';
-                const latencyBadge = pingStats.averageLatencyMs !== null
-                    ? `{latency ${pingStats.averageLatencyMs} ms}`
-                    : '{latency N/A}';
-                this.log(`✓ Connection path score ${result.ip} -> ${this.targetIp} (${result.connectivityScore}) ${pingBadge} ${latencyBadge}`, 'success');
+                this.log(`✓ Connection path score ${result.ip} -> ${this.targetIp} (${result.connectivityScore}) ${pingBadge} ${latencyBadge} {mtr ✓}`, 'success');
             } else {
                 providerResults.failedConnections.push(result);
-                this.log(`✗ Connection path failed ${result.ip} -> ${this.targetIp}`, 'error');
+                const mtrState = result.stageResults?.mtr || 'skipped';
+                this.log(`✗ Connection path failed ${result.ip} -> ${this.targetIp} ${pingBadge} ${latencyBadge} {mtr ${mtrState}}`, 'error');
             }
         });
 
