@@ -57,6 +57,26 @@ class IranConnectivityAnalyzer {
         }
     }
 
+    parsePingMetrics(output) {
+        const normalized = String(output || '');
+        const packetLine = normalized.match(/(\d+)\s+packets transmitted,\s*(\d+)\s+(?:packets\s+)?received/i);
+        const lossLine = normalized.match(/(\d+(?:\.\d+)?)%\s+packet loss/i);
+        const avgLine = normalized.match(/=\s*([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)\s*ms/i);
+        const timeLine = normalized.match(/time[=<]\s*([\d.]+)\s*ms/i);
+
+        const transmitted = packetLine ? Number(packetLine[1]) : null;
+        const received = packetLine ? Number(packetLine[2]) : null;
+        const packetLossPercent = lossLine ? Number(lossLine[1]) : null;
+        const averageLatencyMs = avgLine ? Number(avgLine[2]) : (timeLine ? Number(timeLine[1]) : null);
+
+        return {
+            transmitted,
+            received,
+            packetLossPercent,
+            averageLatencyMs
+        };
+    }
+
     async runShellCheck(command) {
         try {
             const { stdout } = await execAsync(command, { timeout: this.timeout * 1000 + 1200 });
@@ -97,13 +117,16 @@ ${error.stderr || ''}`;
                 ping: 'failed',
                 traceroute: 'skipped',
                 bgp: 'skipped'
-            }
+            },
+            sourcePingStats: null,
+            targetPingStats: null
         };
 
         // Baseline checks (kept lightweight for performance scoring)
         const sourcePing = await this.runShellCheck(`ping -c 1 -W ${this.timeout} ${sourceCandidateIp}`);
         const sourcePingOutput = sourcePing.output.toLowerCase();
         results.sourcePing = sourcePingOutput.includes('1 received') || sourcePingOutput.includes('0% packet loss');
+        results.sourcePingStats = this.parsePingMetrics(sourcePing.output);
 
         const source443 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${sourceCandidateIp}/443" 2>/dev/null && echo "SOURCE_443_OPEN" || echo "SOURCE_443_CLOSED"`);
         results.sourcePort443 = source443.output.toLowerCase().includes('source_443_open');
@@ -112,6 +135,7 @@ ${error.stderr || ''}`;
         const targetPingOutput = targetPing.output.toLowerCase();
         results.targetPing = targetPingOutput.includes('1 received') || targetPingOutput.includes('0% packet loss');
         results.stageResults.ping = results.targetPing ? 'passed' : 'failed';
+        results.targetPingStats = this.parsePingMetrics(targetPing.output);
 
         const target80 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/80" 2>/dev/null && echo "TARGET_80_OPEN" || echo "TARGET_80_CLOSED"`);
         results.port80 = target80.output.toLowerCase().includes('target_80_open');
@@ -262,7 +286,14 @@ ${error.stderr || ''}`;
                     result.connectivityScore > providerResults.bestConnection.connectivityScore) {
                     providerResults.bestConnection = result;
                 }
-                this.log(`✓ Connection path score ${result.ip} -> ${this.targetIp} (${result.connectivityScore})`, 'success');
+                const pingStats = result.targetPingStats || {};
+                const pingBadge = (pingStats.transmitted !== null && pingStats.received !== null)
+                    ? `{ping ${pingStats.received}/${pingStats.transmitted}}`
+                    : '{ping N/A}';
+                const latencyBadge = pingStats.averageLatencyMs !== null
+                    ? `{latency ${pingStats.averageLatencyMs} ms}`
+                    : '{latency N/A}';
+                this.log(`✓ Connection path score ${result.ip} -> ${this.targetIp} (${result.connectivityScore}) ${pingBadge} ${latencyBadge}`, 'success');
             } else {
                 providerResults.failedConnections.push(result);
                 this.log(`✗ Connection path failed ${result.ip} -> ${this.targetIp}`, 'error');
