@@ -166,6 +166,10 @@ const IP_RANGES = {
     // Regional Data Centers - Focus on Middle East and surrounding regions
     iranian_data_centers: {
         name: 'Iranian Data Centers',
+        country: 'Iran',
+        testLocations: [
+            { country: 'Iran', city: 'Tehran', cidr: '5.160.0.0/16' }
+        ],
         ranges: [
             // Pars Online
             '5.160.0.0/16', '5.161.0.0/16', '5.162.0.0/16', '5.163.0.0/16',
@@ -184,6 +188,10 @@ const IP_RANGES = {
     
     turkish_data_centers: {
         name: 'Turkish Data Centers',
+        country: 'Turkey',
+        testLocations: [
+            { country: 'Turkey', city: 'Istanbul', cidr: '31.13.0.0/16' }
+        ],
         ranges: [
             '31.13.0.0/16', '31.14.0.0/16', '31.15.0.0/16', '31.16.0.0/16',
             '31.128.0.0/16', '31.129.0.0/16', '31.130.0.0/16', '31.131.0.0/16',
@@ -195,6 +203,10 @@ const IP_RANGES = {
     
     emirati_data_centers: {
         name: 'UAE Data Centers',
+        country: 'United Arab Emirates',
+        testLocations: [
+            { country: 'United Arab Emirates', city: 'Dubai', cidr: '2.48.0.0/14' }
+        ],
         ranges: [
             '2.48.0.0/14', '2.52.0.0/14', '5.30.0.0/16', '5.31.0.0/16',
             '5.32.0.0/16', '5.33.0.0/16', '31.218.0.0/16', '31.219.0.0/16',
@@ -206,6 +218,10 @@ const IP_RANGES = {
     
     qatari_data_centers: {
         name: 'Qatari Data Centers',
+        country: 'Qatar',
+        testLocations: [
+            { country: 'Qatar', city: 'Doha', cidr: '5.100.0.0/16' }
+        ],
         ranges: [
             '5.100.0.0/16', '5.101.0.0/16', '5.102.0.0/16', '5.103.0.0/16',
             '37.210.0.0/16', '37.211.0.0/16', '37.212.0.0/16', '37.213.0.0/16',
@@ -250,14 +266,37 @@ const IP_RANGES = {
     scaleway_paris_dev1s: {
         name: 'Scaleway - Paris, FR (DEV1-S)',
         city: 'Paris',
+        country: 'France',
         package: 'DEV1-S',
         lookingGlass: ['https://www.scaleway.com/en/network/'],
         ranges: ['51.15.0.0/16', '62.210.0.0/16', '212.129.0.0/18']
+    },
+
+    vultr_fremont_regular: {
+        name: 'Vultr - Fremont, US (Regular Cloud Compute)',
+        city: 'Fremont',
+        country: 'United States',
+        package: 'Regular Cloud Compute',
+        lookingGlass: ['https://www.vultr.com/looking-glass/'],
+        ranges: ['66.42.0.0/16', '108.61.0.0/16', '149.28.0.0/16']
+    },
+
+    digitalocean_fra1_basic: {
+        name: 'DigitalOcean - Frankfurt, DE (Basic Droplet)',
+        city: 'Frankfurt',
+        country: 'Germany',
+        package: 'Basic Droplet',
+        lookingGlass: ['https://www.digitalocean.com/network/'],
+        ranges: ['46.101.0.0/16', '159.65.0.0/16', '178.62.0.0/16']
     },
     
     // Russian data centers that might have good connectivity to Iran
     russian_data_centers: {
         name: 'Russian Data Centers',
+        country: 'Russia',
+        testLocations: [
+            { country: 'Russia', city: 'Moscow', cidr: '5.3.0.0/16' }
+        ],
         ranges: [
             '5.3.0.0/16', '5.4.0.0/16', '5.8.0.0/16', '5.9.0.0/16',
             '31.13.0.0/16', '31.14.0.0/16', '31.15.0.0/16', '31.16.0.0/16',
@@ -387,6 +426,10 @@ const IP_RANGES = {
     // Chinese data centers that might have good connectivity to Iran
     chinese_data_centers: {
         name: 'Chinese Data Centers',
+        country: 'China',
+        testLocations: [
+            { country: 'China', city: 'Beijing', cidr: '1.1.0.0/16' }
+        ],
         ranges: [
             '1.0.1.0/24', '1.0.2.0/23', '1.0.4.0/22', '1.0.8.0/21', '1.0.16.0/20',
             '1.0.32.0/19', '1.0.64.0/18', '1.0.128.0/17', '1.1.0.0/16', '1.2.0.0/15',
