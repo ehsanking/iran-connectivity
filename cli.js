@@ -327,6 +327,12 @@ class IranCheckCLI {
                         console.log(`     • پینگ مقصد (${results.targetIp}): ${conn.targetPing ? '✓' : '✗'}`);
                         console.log(`     • پورت 80 مقصد: ${conn.port80 ? '✓' : '✗'}`);
                         console.log(`     • پورت 443 مقصد: ${conn.port443 ? '✓' : '✗'}`);
+                        if (conn.tracerouteAvailable) {
+                            console.log(`     • traceroute تا مقصد: ${conn.tracerouteReachedTarget ? '✓' : '✗'} (hop: ${conn.tracerouteHops ?? 'N/A'})`);
+                        }
+                        if (conn.mtrAvailable) {
+                            console.log(`     • mtr packet loss: ${conn.mtrLossPercent ?? 'N/A'}%`);
+                        }
                         console.log(`     • هدف‌پذیری مقصد: ${conn.targetReachability || 0}%`);
                     }
                 }
@@ -372,7 +378,7 @@ class IranCheckCLI {
     }
 
     convertToCsv(results) {
-        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Best IP Location,Port 80,Port 443,Port 22,Port 53\n';
+        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Best IP Location,Port 80,Port 443,Port 22,Port 53,Traceroute Reached Target,MTR Loss %\n';
         
         results.detailedResults.forEach(provider => {
             const successRate = provider.ranges.length > 0 
@@ -384,7 +390,7 @@ class IranCheckCLI {
                 ? `${bestConn.location.city || 'Unknown City'}, ${bestConn.location.country || 'Unknown Country'}`
                 : 'N/A';
             
-            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestLocation},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false}\n`;
+            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestLocation},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false},${bestConn.tracerouteReachedTarget ?? 'N/A'},${bestConn.mtrLossPercent ?? 'N/A'}\n`;
         });
         
         return csv;
