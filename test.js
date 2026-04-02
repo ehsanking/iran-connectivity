@@ -154,6 +154,6 @@ try {
 }
 
 console.log('🎉 All tests completed!');
-console.log('\n💡 برای اجرای واقعی:');
-console.log('   node cli.js analyze <IP_ایران>');
-console.log('   مثال: node cli.js analyze 185.185.123.45');
+console.log('\n💡 To run a real connectivity scan:');
+console.log('   node cli.js analyze <IRANIAN_IP>');
+console.log('   Example: node cli.js analyze 185.185.123.45');
