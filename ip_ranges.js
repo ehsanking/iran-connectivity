@@ -293,6 +293,33 @@ const IP_RANGES = {
         lookingGlass: ['https://www.digitalocean.com/network/'],
         ranges: ['46.101.0.0/16', '159.65.0.0/16', '178.62.0.0/16']
     },
+
+    gcore_frankfurt_general: {
+        name: 'Gcore - Frankfurt, DE (General Compute)',
+        city: 'Frankfurt',
+        country: 'Germany',
+        package: 'General Compute',
+        lookingGlass: ['https://gcore.com/looking-glass'],
+        ranges: ['92.223.0.0/16', '92.38.128.0/17', '193.9.112.0/22']
+    },
+
+    gcore_amsterdam_general: {
+        name: 'Gcore - Amsterdam, NL (General Compute)',
+        city: 'Amsterdam',
+        country: 'Netherlands',
+        package: 'General Compute',
+        lookingGlass: ['https://gcore.com/looking-glass'],
+        ranges: ['185.140.148.0/22', '185.181.100.0/22', '45.95.4.0/22']
+    },
+
+    gcore_istanbul_general: {
+        name: 'Gcore - Istanbul, TR (General Compute)',
+        city: 'Istanbul',
+        country: 'Turkey',
+        package: 'General Compute',
+        lookingGlass: ['https://gcore.com/looking-glass'],
+        ranges: ['5.188.232.0/21', '80.77.172.0/22', '176.97.64.0/21']
+    },
     
     // Russian data centers that might have good connectivity to Iran
     russian_data_centers: {

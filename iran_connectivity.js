@@ -53,113 +53,113 @@ class IranConnectivityAnalyzer {
         }
     }
 
-    async testConnectivity(sourceCandidateIp, targetIp) {
-        return new Promise((resolve) => {
-            const startTime = Date.now();
-            
-            const finalTarget = targetIp || this.targetIp;
-            // Run both source-reachability checks and target reachability checks
-            const tests = [
-                `ping -c 1 -W ${this.timeout} ${sourceCandidateIp}`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${sourceCandidateIp}/443" 2>/dev/null && echo "SOURCE_443_OPEN" || echo "SOURCE_443_CLOSED"`,
-                `ping -c 1 -W ${this.timeout} ${finalTarget}`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/80" 2>/dev/null && echo "TARGET_80_OPEN" || echo "TARGET_80_CLOSED"`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/443" 2>/dev/null && echo "TARGET_443_OPEN" || echo "TARGET_443_CLOSED"`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/22" 2>/dev/null && echo "TARGET_22_OPEN" || echo "TARGET_22_CLOSED"`,
-                `timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/53" 2>/dev/null && echo "TARGET_53_OPEN" || echo "TARGET_53_CLOSED"`,
-                `command -v traceroute >/dev/null 2>&1 && traceroute -n -w 1 -q 1 -m 8 ${finalTarget} 2>/dev/null || echo "TRACEROUTE_UNAVAILABLE"`,
-                `command -v mtr >/dev/null 2>&1 && mtr -n -r -c 3 --report-wide ${finalTarget} 2>/dev/null || echo "MTR_UNAVAILABLE"`
-            ];
+    async runShellCheck(command) {
+        try {
+            const { stdout } = await execAsync(command, { timeout: this.timeout * 1000 + 1200 });
+            return { ok: true, output: String(stdout || '') };
+        } catch (error) {
+            const combinedOutput = `${error.stdout || ''}
+${error.stderr || ''}`;
+            return { ok: false, output: combinedOutput };
+        }
+    }
 
-            let completedTests = 0;
-            let results = {
-                ip: sourceCandidateIp,
-                targetIp: finalTarget,
-                sourcePing: false,
-                sourcePort443: false,
-                targetPing: false,
-                port80: false,
-                port443: false,
-                port22: false,
-                port53: false,
-                tracerouteAvailable: false,
-                tracerouteHops: null,
-                tracerouteReachedTarget: null,
-                mtrAvailable: false,
-                mtrLossPercent: null,
-                responseTime: 0,
-                targetReachability: 0,
-                connectivityScore: 0
-            };
+    async testConnectivity(sourceCandidateIp, targetIp, testedCidr = null) {
+        const startTime = Date.now();
+        const finalTarget = targetIp || this.targetIp;
 
-            const checkCompletion = () => {
-                completedTests++;
-                if (completedTests >= tests.length) {
-                    results.responseTime = Date.now() - startTime;
-                    // Calculate connectivity score
-                    results.connectivityScore = this.calculateConnectivityScore(results);
-                    resolve(results);
+        const results = {
+            ip: sourceCandidateIp,
+            testedCidr,
+            targetIp: finalTarget,
+            sourcePing: false,
+            sourcePort443: false,
+            targetPing: false,
+            port80: false,
+            port443: false,
+            port22: false,
+            port53: false,
+            tracerouteAvailable: false,
+            tracerouteHops: null,
+            tracerouteReachedTarget: null,
+            bgpCheckAvailable: false,
+            bgpOriginAsn: null,
+            bgpPrefix: null,
+            bgpRegistry: null,
+            responseTime: 0,
+            targetReachability: 0,
+            connectivityScore: 0,
+            stageResults: {
+                ping: 'failed',
+                traceroute: 'skipped',
+                bgp: 'skipped'
+            }
+        };
+
+        // Baseline checks (kept lightweight for performance scoring)
+        const sourcePing = await this.runShellCheck(`ping -c 1 -W ${this.timeout} ${sourceCandidateIp}`);
+        const sourcePingOutput = sourcePing.output.toLowerCase();
+        results.sourcePing = sourcePingOutput.includes('1 received') || sourcePingOutput.includes('0% packet loss');
+
+        const source443 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${sourceCandidateIp}/443" 2>/dev/null && echo "SOURCE_443_OPEN" || echo "SOURCE_443_CLOSED"`);
+        results.sourcePort443 = source443.output.toLowerCase().includes('source_443_open');
+
+        const targetPing = await this.runShellCheck(`ping -c 1 -W ${this.timeout} ${finalTarget}`);
+        const targetPingOutput = targetPing.output.toLowerCase();
+        results.targetPing = targetPingOutput.includes('1 received') || targetPingOutput.includes('0% packet loss');
+        results.stageResults.ping = results.targetPing ? 'passed' : 'failed';
+
+        const target80 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/80" 2>/dev/null && echo "TARGET_80_OPEN" || echo "TARGET_80_CLOSED"`);
+        results.port80 = target80.output.toLowerCase().includes('target_80_open');
+
+        const target443 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/443" 2>/dev/null && echo "TARGET_443_OPEN" || echo "TARGET_443_CLOSED"`);
+        results.port443 = target443.output.toLowerCase().includes('target_443_open');
+
+        const target22 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/22" 2>/dev/null && echo "TARGET_22_OPEN" || echo "TARGET_22_CLOSED"`);
+        results.port22 = target22.output.toLowerCase().includes('target_22_open');
+
+        const target53 = await this.runShellCheck(`timeout ${this.timeout} bash -c "</dev/tcp/${finalTarget}/53" 2>/dev/null && echo "TARGET_53_OPEN" || echo "TARGET_53_CLOSED"`);
+        results.port53 = target53.output.toLowerCase().includes('target_53_open');
+
+        // Stage 2: traceroute only if ping is successful
+        if (results.targetPing) {
+            const traceroute = await this.runShellCheck(`command -v traceroute >/dev/null 2>&1 && traceroute -n -w 1 -q 1 -m 8 ${finalTarget} 2>/dev/null || echo "TRACEROUTE_UNAVAILABLE"`);
+            const tracerOutput = traceroute.output.toLowerCase();
+            if (!tracerOutput.includes('traceroute_unavailable')) {
+                results.tracerouteAvailable = true;
+                const tracerLines = traceroute.output.split('\n').filter((line) => /^\s*\d+\s+/.test(line));
+                results.tracerouteHops = tracerLines.length;
+                const lastHop = tracerLines[tracerLines.length - 1] || '';
+                results.tracerouteReachedTarget = lastHop.includes(finalTarget);
+                results.stageResults.traceroute = 'passed';
+            } else {
+                results.stageResults.traceroute = 'unavailable';
+            }
+
+            // Stage 3: BGP lookup only after traceroute stage runs
+            const bgp = await this.runShellCheck(`command -v whois >/dev/null 2>&1 && whois -h whois.cymru.com " -v ${finalTarget}" 2>/dev/null || echo "BGP_UNAVAILABLE"`);
+            const bgpOutput = bgp.output;
+            if (!bgpOutput.toLowerCase().includes('bgp_unavailable')) {
+                const lines = bgpOutput.split('\n').map((line) => line.trim()).filter(Boolean);
+                const dataLine = lines.find((line) => /^\d+\s*\|/.test(line));
+                if (dataLine) {
+                    const parts = dataLine.split('|').map((item) => item.trim());
+                    results.bgpCheckAvailable = true;
+                    results.bgpOriginAsn = parts[0] || null;
+                    results.bgpPrefix = parts[2] || null;
+                    results.bgpRegistry = parts[3] || null;
+                    results.stageResults.bgp = 'passed';
+                } else {
+                    results.stageResults.bgp = 'no-data';
                 }
-            };
+            } else {
+                results.stageResults.bgp = 'unavailable';
+            }
+        }
 
-            // Execute all tests
-            tests.forEach((command, index) => {
-                execAsync(command)
-                    .then(({ stdout, stderr }) => {
-                        const output = stdout.toString().toLowerCase();
-                        switch (index) {
-                            case 0:
-                                results.sourcePing = output.includes('1 received') || output.includes('0% packet loss');
-                                break;
-                            case 1:
-                                results.sourcePort443 = output.includes('source_443_open');
-                                break;
-                            case 2:
-                                results.targetPing = output.includes('1 received') || output.includes('0% packet loss');
-                                break;
-                            case 3:
-                                results.port80 = output.includes('target_80_open');
-                                break;
-                            case 4:
-                                results.port443 = output.includes('target_443_open');
-                                break;
-                            case 5:
-                                results.port22 = output.includes('target_22_open');
-                                break;
-                            case 6:
-                                results.port53 = output.includes('target_53_open');
-                                break;
-                            case 7: {
-                                if (!output.includes('traceroute_unavailable')) {
-                                    results.tracerouteAvailable = true;
-                                    const tracerLines = output.split('\n').filter(line => /^\s*\d+\s+/.test(line));
-                                    results.tracerouteHops = tracerLines.length;
-                                    const lastHop = tracerLines[tracerLines.length - 1] || '';
-                                    results.tracerouteReachedTarget = lastHop.includes(finalTarget);
-                                }
-                                break;
-                            }
-                            case 8: {
-                                if (!output.includes('mtr_unavailable')) {
-                                    results.mtrAvailable = true;
-                                    const mtrLines = output.split('\n').filter(line => line.includes('|--'));
-                                    const lastMtrLine = mtrLines[mtrLines.length - 1] || '';
-                                    const lossMatch = lastMtrLine.match(/(\d+(?:\.\d+)?)%/);
-                                    if (lossMatch) {
-                                        results.mtrLossPercent = parseFloat(lossMatch[1]);
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                        checkCompletion();
-                    })
-                    .catch(() => {
-                        // Test failed
-                        checkCompletion();
-                    });
-            });
-        });
+        results.responseTime = Date.now() - startTime;
+        results.connectivityScore = this.calculateConnectivityScore(results);
+        return results;
     }
 
     calculateConnectivityScore(results) {
@@ -193,6 +193,7 @@ class IranConnectivityAnalyzer {
             'iranian_data_centers', 'turkish_data_centers', 'emirati_data_centers', 'qatari_data_centers',
             'russian_data_centers', 'chinese_data_centers', 'hetzner_falkenstein_cx22', 'ovh_gravelines_starter',
             'leaseweb_amsterdam_general', 'contabo_nuremberg_vps_s', 'scaleway_paris_dev1s',
+            'gcore_frankfurt_general', 'gcore_amsterdam_general', 'gcore_istanbul_general',
             'vultr_fremont_regular', 'digitalocean_fra1_basic'
         ]);
         const cdnProviders = new Set(['cloudflare', 'akamai', 'fastly']);
@@ -238,7 +239,7 @@ class IranConnectivityAnalyzer {
         const tasks = sampleTargets.map((sampleTarget) => async () => {
             if (!this.isRunning) return null;
             try {
-                const connectivityResult = await this.testConnectivity(sampleTarget.ip, this.targetIp);
+                const connectivityResult = await this.testConnectivity(sampleTarget.ip, this.targetIp, sampleTarget.cidr || null);
                 if (sampleTarget.location) {
                     connectivityResult.location = sampleTarget.location;
                 }
@@ -297,7 +298,7 @@ class IranConnectivityAnalyzer {
         providerInfo.ranges.forEach((cidrRange) => {
             this.getSampleIpsFromCidr(cidrRange, 2).forEach((ip) => {
                 if (!seenIps.has(ip)) {
-                    sampleTargets.push({ ip });
+                    sampleTargets.push({ ip, cidr: cidrRange });
                     seenIps.add(ip);
                 }
             });
@@ -352,10 +353,10 @@ class IranConnectivityAnalyzer {
         console.log(`
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                        Iran Internet Access Analysis Tool                    ║
-║                              برای حفظ آزادی اینترنت                        ║
+║                For resilient internet access and observability              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-هدف: یافتن دیتاسنترها و CDNهایی که به سرور ایران (${this.targetIp}) متصل میشوند
+Goal: identify datacenters and CDNs that can reach the Iranian target (${this.targetIp})
 
 `);
 
@@ -370,10 +371,10 @@ class IranConnectivityAnalyzer {
             return a.name.localeCompare(b.name);
         });
         
-        this.log(`شروع آزمایش اتصال به ${providers.length} ارائهدهنده مختلف...`);
-        this.log(`آی‌پی هدف: ${this.targetIp}`);
-        this.log(`تایماوت: ${this.timeout} ثانیه`);
-        this.log(`حداکثر تست همزمان: ${this.maxConcurrent}`);
+        this.log(`Starting connectivity tests across ${providers.length} providers...`);
+        this.log(`Target IP: ${this.targetIp}`);
+        this.log(`Timeout: ${this.timeout} seconds`);
+        this.log(`Maximum concurrent tests: ${this.maxConcurrent}`);
         
         let testedProviders = 0;
         
@@ -395,7 +396,7 @@ class IranConnectivityAnalyzer {
                         bestScore: result.connectivityScore
                     });
                     this.results.summary.successfulConnections++;
-                    this.log(`✓ ${provider.name}: ${result.successfulConnections.length} اتصال موفق (امتیاز: ${result.connectivityScore})`, 'success');
+                    this.log(`✓ ${provider.name}: ${result.successfulConnections.length} successful paths (score: ${result.connectivityScore})`, 'success');
                 } else {
                     this.results.failedProviders.push({
                         provider: provider.key,
@@ -403,17 +404,17 @@ class IranConnectivityAnalyzer {
                         reason: 'No successful connections'
                     });
                     this.results.summary.failedConnections++;
-                    this.log(`✗ ${provider.name}: هیچ اتصال موفقیتی پیدا نشد`, 'error');
+                    this.log(`✗ ${provider.name}: no successful paths found`, 'error');
                 }
                 
                 testedProviders++;
                 
                 // Progress indicator
                 const progress = Math.round((testedProviders / providers.length) * 100);
-                process.stdout.write(`\rپیشرفت: ${progress}% (${testedProviders}/${providers.length})`);
+                process.stdout.write(`\rProgress: ${progress}% (${testedProviders}/${providers.length})`);
                 
             } catch (error) {
-                this.log(`خطا در آزمایش ${provider.name}: ${error.message}`, 'error');
+                this.log(`Error while testing ${provider.name}: ${error.message}`, 'error');
                 this.results.failedProviders.push({
                     provider: provider.key,
                     name: provider.name,
@@ -438,41 +439,41 @@ class IranConnectivityAnalyzer {
     async generateReport() {
         try {
             fs.writeFileSync(this.outputFile, JSON.stringify(this.results, null, 2));
-            this.log(`گزارش کامل در فایل ${this.outputFile} ذخیره شد`, 'success');
+            this.log(`Detailed report saved to ${this.outputFile}`, 'success');
         } catch (error) {
-            this.log(`خطا در ذخیره گزارش: ${error.message}`, 'error');
+            this.log(`Failed to save report: ${error.message}`, 'error');
         }
     }
 
     printSummary() {
         console.log(`
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                                خلاصه نتایج                                   ║
+║                                Results Summary                               ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-📊 آمار کلی:
-   • کل ارائهدهندگان آزمایش شده: ${this.results.summary.totalTested}
-   • اتصالات موفق: ${this.results.summary.successfulConnections}
-   • اتصالات ناموفق: ${this.results.summary.failedConnections}
-   • نرخ موفقیت: ${this.results.summary.successRate}%
+📊 Overall stats:
+   • Total providers tested: ${this.results.summary.totalTested}
+   • Successful providers: ${this.results.summary.successfulConnections}
+   • Failed providers: ${this.results.summary.failedConnections}
+   • Success rate: ${this.results.summary.successRate}%
 
-✅ ارائهدهندگان موفق (${this.results.successfulProviders.length}):
+✅ Successful providers (${this.results.successfulProviders.length}):
 `);
 
         this.results.successfulProviders.forEach((provider, index) => {
-            console.log(`   ${index + 1}. ${provider.name} (امتیاز: ${provider.bestScore})`);
+            console.log(`   ${index + 1}. ${provider.name} (score: ${provider.bestScore})`);
         });
 
         if (this.results.successfulProviders.length > 0) {
             console.log(`
-🔧 پیشنهادات تونل:
+🔧 Tunnel suggestions:
 `);
             this.printTunnelRecommendations();
         }
 
         console.log(`
-📁 گزارش کامل در فایل: ${this.outputFile}
-🌐 برای حفظ آزادی اینترنت - برای بشریت
+📁 Full report file: ${this.outputFile}
+🌐 Built for resilient and open internet access
 `);
     }
 
@@ -481,36 +482,36 @@ class IranConnectivityAnalyzer {
             .sort((a, b) => b.bestScore - a.bestScore)
             .slice(0, 3);
 
-        console.log('   بهترین گزینهها برای تونل ریورس:');
+        console.log('   Best options for reverse tunneling:');
         bestProviders.forEach((provider, index) => {
             console.log(`   ${index + 1}. ${provider.name}`);
         });
 
         console.log(`
-   🔐 پروتکلهای پیشنهادی بر اساس وضعیت فعلی:
-   • SSH Tunnel: مناسب برای اتصالات پایدار با امنیت بالا
-   • WireGuard: سریع و مدرن، مناسب برای UDP
-   • OpenVPN TCP: برای عبور از فایروالهای سختگیرانه
-   • Shadowsocks: سبک و سریع برای پروکسی
-   • V2Ray/Vmess: با قابلیتهای پیشرفته برای دور زدن DPI
+   🔐 Suggested protocols for current conditions:
+   • SSH Tunnel: suitable for stable links with strong security
+   • WireGuard: fast and modern, suitable for UDP
+   • OpenVPN TCP: suitable for restrictive firewalls
+   • Shadowsocks: lightweight and fast proxy option
+   • V2Ray/Vmess: advanced evasion capabilities under DPI
    
-   📡 نوع ترنزیشن پیشنهادی:
-   • TCP over TCP: برای اتصالات پایدار
-   • UDP over TCP: برای سرعت بالاتر
-   • WebSocket over TLS: برای مخفیسازی کامل
-   • HTTP/2 over TLS: برای ادغام با ترافیک وب
+   📡 Suggested transport types:
+   • TCP over TCP: higher stability
+   • UDP over TCP: better throughput
+   • WebSocket over TLS: stronger traffic blending
+   • HTTP/2 over TLS: web-traffic blending
         `);
     }
 
     stop() {
         this.isRunning = false;
-        this.log('تست متوقف شد', 'info');
+        this.log('Test stopped', 'info');
     }
 }
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-    console.log('\nدر حال توقف تست...');
+    console.log('\nStopping tests...');
     if (analyzer) {
         analyzer.stop();
     }
@@ -523,16 +524,16 @@ if (require.main === module) {
     const targetIp = process.argv[2];
     
     if (!targetIp) {
-        console.error('لطفاً آی‌پی سرور ایران را وارد کنید:');
-        console.error('استفاده: node iran_connectivity.js <target-ip>');
-        console.error('مثال: node iran_connectivity.js 185.185.123.45');
+        console.error('Please provide the Iranian target server IP:');
+        console.error('Usage: node iran_connectivity.js <target-ip>');
+        console.error('Example: node iran_connectivity.js 185.185.123.45');
         process.exit(1);
     }
 
     // Validate IP format
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
     if (!ipRegex.test(targetIp)) {
-        console.error('آی‌پی وارد شده معتبر نیست');
+        console.error('The provided IP is not valid');
         process.exit(1);
     }
 
@@ -544,7 +545,7 @@ if (require.main === module) {
     });
 
     analyzer.runAnalysis().catch(error => {
-        console.error('خطا در اجرای تحلیل:', error);
+        console.error('Failed to run analysis:', error);
         process.exit(1);
     });
 }
