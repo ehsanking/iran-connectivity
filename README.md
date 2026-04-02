@@ -29,6 +29,34 @@ cd iran-connectivity
 apt install npm -y
 ```
 
+### Build | ساخت
+
+**English:**
+```bash
+# install dependencies
+npm install
+
+# run test suite
+npm test
+
+# optional: install globally for `iran-check`
+npm pack
+npm install -g ./iran-check-1.0.0.tgz
+```
+
+**فارسی:**
+```bash
+# نصب وابستگی‌ها
+npm install
+
+# اجرای تست‌ها
+npm test
+
+# اختیاری: نصب سراسری برای دستور `iran-check`
+npm pack
+npm install -g ./iran-check-1.0.0.tgz
+```
+
 ### Basic Usage | استفاده پایه
 
 **English:**
@@ -63,6 +91,100 @@ node cli.js recommend connectivity_report.json
 **English:** 📖 [Detailed English Tutorial](TUTORIAL_EN.md) - Complete guide with examples
 
 **فارسی:** 📖 [آموزش جامع فارسی](TUTORIAL_FA.md) - راهنمای کامل با مثال
+
+---
+
+## 🔌 Connecting Iran Server to Internet Transit (Step-by-step) | اتصال سرور ایران به ترانزیت اینترنت
+
+### Goal | هدف
+**English:** Keep a service reachable when direct international paths are unstable by selecting a stable transit provider and an encrypted tunnel path.  
+**فارسی:** وقتی مسیر مستقیم بین‌الملل ناپایدار است، با انتخاب ترانزیت پایدار و تونل رمزنگاری‌شده سرویس را در دسترس نگه دارید.
+
+### 1) Prepare Iran-side server | آماده‌سازی سرور ایران
+
+```bash
+# update system (Ubuntu/Debian)
+sudo apt update && sudo apt -y upgrade
+
+# install required tools
+sudo apt install -y nodejs npm curl mtr-tiny traceroute netcat-openbsd
+
+# open required firewall ports (example: tcp/443 and udp/51820)
+sudo ufw allow 443/tcp
+sudo ufw allow 51820/udp
+```
+
+### 2) Run listener for probe tests | اجرای لیسنر برای تست اولیه
+
+```bash
+# on Iran server
+node cli.js listener --protocol both --port 9000
+```
+
+Then from an external probe/VPS:
+```bash
+# tcp probe
+echo "ping" | nc <IRAN_SERVER_IP> 9000
+
+# udp probe
+echo "ping" | nc -u -w2 <IRAN_SERVER_IP> 9000
+```
+
+### 3) Find best transit path | پیدا کردن بهترین مسیر ترانزیت
+
+```bash
+# from probe host (outside Iran)
+node cli.js analyze <IRAN_SERVER_IP> --detailed --timeout 10 --output transit_report.json
+
+# optional recommendation extraction
+node cli.js recommend transit_report.json
+```
+
+### 4) Attach tunnel on top of selected transit | قرار دادن تونل روی ترانزیت انتخابی
+
+**Suggested order:** WireGuard (UDP) → OpenVPN/SSH over TCP443 fallback.
+
+Minimal WireGuard flow:
+1. Create WG server on transit VPS (outside Iran).
+2. Create WG client on Iran server.
+3. Route required traffic/subnets over WG interface only.
+4. Keep management SSH path separated (out-of-band if possible).
+
+### 5) Validate IP Transit end-to-end | اعتبارسنجی نهایی IP Transit
+
+Run from probe host and Iran server:
+```bash
+# route visibility
+traceroute <IRAN_SERVER_IP>
+mtr -rwzc 20 <IRAN_SERVER_IP>
+
+# connectivity analyzer
+node cli.js analyze <IRAN_SERVER_IP> --detailed --timeout 15
+```
+
+Check:
+- packet loss is low and stable
+- TCP/443 stays open
+- same provider remains reachable across repeated tests
+
+### Simple Network Diagram | نمودار ساده برای کاربر عمومی
+
+```text
+[User / Client]
+      |
+      v
+[Transit VPS or CDN Edge]
+  (Turkey/UAE/Europe)
+      |
+  Encrypted Tunnel
+ (WireGuard / OpenVPN / SSH)
+      |
+      v
+[Iran Server]
+  App + Listener + Service
+```
+
+**Operational tip | نکته عملیاتی:** Test at different times of day and keep at least one backup transit provider.
 
 ---
 
