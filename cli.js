@@ -318,6 +318,11 @@ class IranCheckCLI {
                     if (provider.bestConnection) {
                         const conn = provider.bestConnection;
                         console.log(`     • بهترین آی‌پی: ${conn.ip}`);
+                        if (conn.location && (conn.location.city || conn.location.country)) {
+                            const city = conn.location.city || 'نامشخص';
+                            const country = conn.location.country || 'نامشخص';
+                            console.log(`     • لوکیشن آی‌پی: ${city}، ${country}`);
+                        }
                         console.log(`     • پینگ مبدا: ${conn.sourcePing ? '✓' : '✗'}`);
                         console.log(`     • پینگ مقصد (${results.targetIp}): ${conn.targetPing ? '✓' : '✗'}`);
                         console.log(`     • پورت 80 مقصد: ${conn.port80 ? '✓' : '✗'}`);
@@ -367,7 +372,7 @@ class IranCheckCLI {
     }
 
     convertToCsv(results) {
-        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Port 80,Port 443,Port 22,Port 53\n';
+        let csv = 'Provider,Type,Success Rate,Best Score,Best IP,Best IP Location,Port 80,Port 443,Port 22,Port 53\n';
         
         results.detailedResults.forEach(provider => {
             const successRate = provider.ranges.length > 0 
@@ -375,8 +380,11 @@ class IranCheckCLI {
                 : 0;
             
             const bestConn = provider.bestConnection || {};
+            const bestLocation = bestConn.location
+                ? `${bestConn.location.city || 'Unknown City'}, ${bestConn.location.country || 'Unknown Country'}`
+                : 'N/A';
             
-            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false}\n`;
+            csv += `${provider.name},${provider.provider},${successRate},${provider.connectivityScore},${bestConn.ip || 'N/A'},${bestLocation},${bestConn.port80 || false},${bestConn.port443 || false},${bestConn.port22 || false},${bestConn.port53 || false}\n`;
         });
         
         return csv;
@@ -516,8 +524,9 @@ class IranCheckCLI {
         providers.forEach((provider, index) => {
             const providerInfo = IP_RANGES[provider.key] || {};
             const locationLabel = providerInfo.city ? ` | شهر: ${providerInfo.city}` : '';
+            const countryLabel = providerInfo.country ? ` | کشور: ${providerInfo.country}` : '';
             const packageLabel = providerInfo.package ? ` | پکیج: ${providerInfo.package}` : '';
-            console.log(`${chalk.yellow((index + 1).toString().padStart(2))}. ${chalk.green.bold(provider.name.padEnd(30))} ${chalk.gray(`(${provider.rangeCount} ranges${locationLabel}${packageLabel})`)}`);
+            console.log(`${chalk.yellow((index + 1).toString().padStart(2))}. ${chalk.green.bold(provider.name.padEnd(30))} ${chalk.gray(`(${provider.rangeCount} ranges${countryLabel}${locationLabel}${packageLabel})`)}`);
         });
         
         console.log(chalk.gray('═'.repeat(80)));

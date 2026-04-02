@@ -183,13 +183,17 @@ class IranConnectivityAnalyzer {
 
         this.log(`Testing connectivity to ${providerInfo.name} (${providerInfo.ranges.length} ranges)`);
 
-        const sampleIps = providerInfo.ranges.flatMap((cidrRange) => this.getSampleIpsFromCidr(cidrRange, 2));
-        const tasks = sampleIps.map((ip) => async () => {
+        const sampleTargets = this.buildSampleTargets(providerInfo);
+        const tasks = sampleTargets.map((sampleTarget) => async () => {
             if (!this.isRunning) return null;
             try {
-                return await this.testConnectivity(ip, this.targetIp);
+                const connectivityResult = await this.testConnectivity(sampleTarget.ip, this.targetIp);
+                if (sampleTarget.location) {
+                    connectivityResult.location = sampleTarget.location;
+                }
+                return connectivityResult;
             } catch (error) {
-                this.log(`Error testing ${ip}: ${error.message}`, 'error');
+                this.log(`Error testing ${sampleTarget.ip}: ${error.message}`, 'error');
                 return null;
             }
         });
@@ -216,6 +220,39 @@ class IranConnectivityAnalyzer {
         }
 
         return providerResults;
+    }
+
+    buildSampleTargets(providerInfo) {
+        const sampleTargets = [];
+        const seenIps = new Set();
+
+        if (Array.isArray(providerInfo.testLocations)) {
+            providerInfo.testLocations.forEach((testLocation) => {
+                const sampleIp = this.getSampleIpsFromCidr(testLocation.cidr, 1)[0];
+                if (sampleIp && !seenIps.has(sampleIp)) {
+                    sampleTargets.push({
+                        ip: sampleIp,
+                        location: {
+                            country: testLocation.country,
+                            city: testLocation.city,
+                            cidr: testLocation.cidr
+                        }
+                    });
+                    seenIps.add(sampleIp);
+                }
+            });
+        }
+
+        providerInfo.ranges.forEach((cidrRange) => {
+            this.getSampleIpsFromCidr(cidrRange, 2).forEach((ip) => {
+                if (!seenIps.has(ip)) {
+                    sampleTargets.push({ ip });
+                    seenIps.add(ip);
+                }
+            });
+        });
+
+        return sampleTargets;
     }
 
     getSampleIpsFromCidr(cidr, count) {
